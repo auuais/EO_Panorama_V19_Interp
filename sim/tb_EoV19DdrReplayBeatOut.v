@@ -99,7 +99,7 @@ module tb_EoV19DdrReplayBeatOut;
     wire [15:0] pa, pb;
     wire [11:0] rows_done;
     RpLineRing ring (
-        .clk(clk), .rst(ui_rst), .frame_start(frame_edge),
+        .clk(clk), .rst(ui_rst), .frame_start(frame_edge), .sensor_ir(1'b0),
         .beat_valid(beat_valid), .beat_row(beat_row), .beat_idx(beat_idx), .beat_data(beat_data),
         .row_done(row_done), .row_done_row(row_done_row), .rows_done(rows_done), .writer_idle(),
         .rd_word(rd_word), .rd_sel(rd_sel), .rd_cam(rd_cam), .rd_slot_a(slot_a), .rd_slot_b(slot_b),
