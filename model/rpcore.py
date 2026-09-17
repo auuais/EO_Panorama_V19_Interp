@@ -7,9 +7,13 @@ time.  This model describes both through a Sensor config:
 
   * geometry: source size, segment ROM layout, per-camera strip widths,
     panorama starts, output width
-  * sampling: EO interpolates luma and the per-pixel chroma byte with
-    rounding (interp8) and phase-locks x to pano_x parity; IR interpolates
-    luma only with the M1 IR renderer's truncating vlerp, chroma is 0x80
+  * sampling (interp="none", RpSampler INTERP 0): the nearest source pixel,
+    x = round(ax), row = round(ay); EO x phase-locked to pano_x parity; IR
+    chroma is 0x80
+  * sampling (interp="vlerp", RpSampler INTERP 1, M1): EO interpolates luma
+    and the per-pixel chroma byte vertically with rounding (interp8) from
+    x = floor(ax) phase-locked to parity; IR interpolates luma only with the
+    M1 IR renderer's truncating vlerp
   * seams: tail of strip k (tail_start..W_k-1) blended into the head of
     strip k+1 (j < head_len), sample index min(j, tail_len-1), alpha index
     alpha_pos(j).  IR's cam2/cam3 seam straddles the fold: 48 tail pixels,
@@ -174,15 +178,17 @@ def vlerp(p0, p1, f):
     return (p0 + (((p1 - p0) * f) >> 16)) & 0xFF
 
 
-def qx_phase(ax, parity):
-    q = np.where(ax < 0, 0, np.where(ax > (1918 << 16), 1918, (ax >> 16) & 0x7FF))
+def qx_phase(ax, parity, rnd=0):
+    q = np.where(ax < 0, 0, np.where(ax > (1918 << 16), 1918, ((ax >> 16) & 0x7FF) + (rnd & (ax >> 15) & 1)))
     return np.where(q == 0, parity, np.where(q >= 1918, np.where(parity == 1, 1919, 1918), (q & ~1) | parity))
 
 
 # ---------------------------------------------------------------------------
 # Offset renderer (functional)
 # ---------------------------------------------------------------------------
-def strips(s: Sensor, rom, frames, roll, pitch):
+def strips(s: Sensor, rom, frames, roll, pitch, interp="none"):
+    assert interp in ("none", "vlerp")
+    rnd = 1 if interp == "none" else 0
     out = []
     xmax, ymax = (s.src_w - 2) << 16, (s.src_h - 2) << 16
     for cam in range(NCAM):
@@ -197,11 +203,17 @@ def strips(s: Sensor, rom, frames, roll, pitch):
         fr = ay & 0xFFFF
         f = frames[cam]
         if s.is_ir:
-            x = np.clip(ax >> 16, 0, s.src_w - 2)
-            px = (vlerp(f[y0, x] >> 8, f[y0 + 1, x] >> 8, fr) << 8) | 0x80
+            xf = ax >> 16
+            x = np.where(ax < 0, 0, np.where(xf > s.src_w - 2, s.src_w - 2, xf + (rnd & (ax >> 15) & 1)))
         else:
-            x = qx_phase(ax, (s.cam_start[cam] + lx) & 1)
-            p0, p1 = f[y0, x], f[y0 + 1, x]
+            x = qx_phase(ax, (s.cam_start[cam] + lx) & 1, rnd)
+        p0, p1 = f[y0, x], f[y0 + 1, x]
+        if interp == "none":
+            p = np.where(fr >= 0x8000, p1, p0)
+            px = ((p >> 8) << 8) | 0x80 if s.is_ir else p
+        elif s.is_ir:
+            px = (vlerp(p0 >> 8, p1 >> 8, fr) << 8) | 0x80
+        else:
             px = (interp8(p0 >> 8, p1 >> 8, fr) << 8) | interp8(p0 & 0xFF, p1 & 0xFF, fr)
         out.append(np.where(valid, px, BLACK))
     return out
@@ -239,8 +251,8 @@ def compose(s: Sensor, st, present=(1,) * 6):
     return out
 
 
-def render_offsets(s, rom, frames, roll, pitch, present=(1,) * 6):
-    return compose(s, strips(s, rom, frames, roll, pitch), present)
+def render_offsets(s, rom, frames, roll, pitch, present=(1,) * 6, interp="none"):
+    return compose(s, strips(s, rom, frames, roll, pitch, interp), present)
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +396,7 @@ def selftest():
     fr_eo = synthetic_frames(EO)
     for r, p, pres in [([0] * 6, [0] * 6, (1,) * 6),
                        ([150, -300, 1000, -1000, 0, 777], [-1000, 250, 0, 1000, -60, 5], (1, 1, 1, 0, 1, 1))]:
-        a = render_offsets(EO, rom_eo, fr_eo, r, p, pres)
+        a = render_offsets(EO, rom_eo, fr_eo, r, p, pres, interp="vlerp")
         b = g.render_offsets(g.load_rom(), g.synthetic_frames(), r, p, pres)
         n = int((a != b).sum()); ok &= n == 0
         print(f"EO generic vs golden.py {r[:2]}.. present={pres}: {n} mismatches")
@@ -392,7 +404,7 @@ def selftest():
     rom_ir = load_rom(IR)
     fr_ir = synthetic_frames(IR)
     for pres in [(1,) * 6, (1, 1, 0, 1, 1, 1), (1, 1, 1, 0, 1, 1)]:
-        a = render_offsets(IR, rom_ir, fr_ir, [0] * 6, [0] * 6, pres)
+        a = render_offsets(IR, rom_ir, fr_ir, [0] * 6, [0] * 6, pres, interp="vlerp")
         b = render_m1_ir(rom_ir, fr_ir, pres)
         n = int((a != b).sum()); ok &= n == 0
         print(f"IR zero offset vs M1 IR transcription, present={pres}: {n} mismatches")

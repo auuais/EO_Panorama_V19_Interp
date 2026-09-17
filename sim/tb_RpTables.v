@@ -2,7 +2,7 @@
 // RpTables against model/golden.py build_tables() for four offset cases.
 // Vectors: python model/gen_rp_roms.py  ->  sim/vectors/rp_tables_<case>/
 module tb_RpTables;
-    parameter ROOT = "E:/Xylinx/EO_Panorama_V19_RollPitch";
+    parameter ROOT = "E:/Xylinx/EO_Panorama_V19_Interp";
 
     reg clk = 1'b0;
     always #5 clk = ~clk;

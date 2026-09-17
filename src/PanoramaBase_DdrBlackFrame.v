@@ -153,6 +153,9 @@ module PanoramaBase_DdrBlackFrame(
     //    row/beat window from the renderer's tables.
     // 0: the M1 output-driven EoV19StreamingRendererII1, unchanged.
     localparam integer EO_RP_RENDERER = 1;
+    // Roll/pitch renderer source sampling: 0 = no interpolation (nearest
+    // source pixel), 1 = M1 vertical bilinear.  See RpSampler.
+    localparam integer RP_INTERP = 0;
 
     //------------------------------------------------------------------------
     // Geometry / DDR layout
@@ -2637,7 +2640,7 @@ module PanoramaBase_DdrBlackFrame(
             wire [15:0] rp_px_data;
             wire rp_need_valid;
             wire [10:0] rp_need_row, rp_start_row;
-            RpRenderer u_v19_renderer (
+            RpRenderer #(.INTERP(RP_INTERP)) u_v19_renderer (
                 .rst_n(rst_n), .clk(c0_ddr4_ui_clk),
                 .sensor_ir(ir_stack_ui),
                 .start_copy(v19_render_active),

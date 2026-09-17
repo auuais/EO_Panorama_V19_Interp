@@ -4,11 +4,16 @@
 // Walker token -> sampled pixel -> RowWindow write.  II=1, no back-pressure.
 //
 //   valid  = 0 <= ax <= (SRC_W-2)<<16  and  0 <= ay <= (SRC_H-2)<<16
-//   x      = qx_phase(ax, parity(CAM_START[cam] + lx))     (M1 renderer)
 //   rows   = the two line-ring slots for y0 and y0+1 (the walker only issues
 //            a valid pixel at the y0 it samples)
-//   Y, C   = vertical interpolation with ay[15:0], rounded (M1 interp8)
 //   out    = valid ? {Y, C} : BLACK
+//
+// INTERP selects how {Y, C} is taken from the source:
+//   0  none (nearest neighbour): x = round(ax), row = round(ay), i.e. y0+1
+//      when ay[15] is set; one source pixel, no arithmetic.  EO x is still
+//      phase-locked to pano_x parity so Cb/Cr alternate correctly.
+//   1  M1: x = floor(ax) (EO phase-locked), Y and C interpolated between y0
+//      and y0+1 with ay[15:0] (EO interp8 rounded, IR truncating vlerp).
 //
 // The RowWindow address is {sy mod 256, strip_x >> 2}; pixel strip_x & 3 of
 // the 72-bit word lives at [sel*18 +: 16] and is written with byte enables,
@@ -21,6 +26,7 @@ module RpSampler #(
     parameter integer SRC_W = 1920,
     parameter integer SRC_H = 1080,
     parameter [15:0]  BLACK = 16'h1080,
+    parameter integer INTERP = 0,          // 0 nearest, 1 M1 vertical bilinear
     parameter integer CAM1_START = 633,  parameter integer CAM2_START = 1271,
     parameter integer CAM3_START = 1909, parameter integer CAM4_START = 2547,
     parameter integer CAM5_START = 3185,
@@ -62,10 +68,10 @@ module RpSampler #(
     output wire               busy,        // any token in flight
     output reg  [31:0]        row_mismatch_count
 );
-    // EO: RowWindow word = 4 x {2'b0, Y, C}; x phase-locked to pano_x parity;
-    //     Y and C interpolated with rounding (M1 EO renderer).
-    // IR: RowWindow word = 8 x {1'b0, Y}; x = floor(ax); luma interpolated
-    //     with the M1 IR renderer's truncating vlerp; C is 0x80.
+    // EO: RowWindow word = 4 x {2'b0, Y, C}; x phase-locked to pano_x parity.
+    // IR: RowWindow word = 8 x {1'b0, Y}; C is 0x80.
+    // Sampling per INTERP (header).
+    localparam RND = (INTERP == 0) ? 1'b1 : 1'b0;   // round x instead of floor
     wire signed [31:0] XMAXQ = sensor_ir ? ((IR_SRC_W - 2) <<< 16) : ((SRC_W - 2) <<< 16);
     wire signed [31:0] YMAXQ = sensor_ir ? ((IR_SRC_H - 2) <<< 16) : ((SRC_H - 2) <<< 16);
 
@@ -102,9 +108,10 @@ module RpSampler #(
         input               parity;
         reg [10:0] q;
         begin
+            // c <= 1918<<16 keeps the rounded q <= 1918 too.
             if (c < 0)                  q = 11'd0;
             else if (c > (1918 <<< 16)) q = 11'd1918;
-            else                        q = c[26:16];
+            else                        q = c[26:16] + (RND & c[15]);
             if (q == 0)            qx_phase = parity ? 11'd1 : 11'd0;
             else if (q >= 11'd1918) qx_phase = parity ? 11'd1919 : 11'd1918;
             else                   qx_phase = {q[10:1], parity};
@@ -128,11 +135,11 @@ module RpSampler #(
             reg [11:0] px;
             reg [10:0] x;
             px = cam_start(tok_cam) + {2'd0, tok_lx};
-            // IR: floor.  Out-of-range samples are written black, so the
-            // clamp only has to keep the ring address in range.
+            // IR: floor (or round).  Out-of-range samples are written black,
+            // so the clamp only has to keep the ring address in range.
             if (sensor_ir)
                 x = tok_ax[31] ? 11'd0 :
-                    (tok_ax[26:16] > (IR_SRC_W - 2)) ? (IR_SRC_W - 2) : tok_ax[26:16];
+                    (tok_ax[26:16] > (IR_SRC_W - 2)) ? (IR_SRC_W - 2) : tok_ax[26:16] + (RND & tok_ax[15]);
             else
                 x = qx_phase(tok_ax, px[0]);
             ring_word <= x[10:2];
@@ -163,7 +170,7 @@ module RpSampler #(
     end
     // vd[4], okd[3], frd[4], slotd[4], stripd[4] are aligned with ring_pa/pb.
 
-    // ---- S6: interpolate --------------------------------------------------
+    // ---- S6: sample ---------------------------------------------------------
     function [32:0] wacc;
         input [7:0] a, b;
         input [15:0] f;
@@ -183,7 +190,8 @@ module RpSampler #(
         end
     endfunction
     reg        v6, ok6;
-    reg [32:0] accy6, accc6;
+    reg [15:0] near6;                      // INTERP 0: the nearest row's {Y, C}
+    reg [32:0] accy6, accc6;               // INTERP 1
     reg [7:0]  ir6;
     reg [8:0]  slot6;
     reg [11:0] strip6;
@@ -191,6 +199,7 @@ module RpSampler #(
         if (rst) v6 <= 1'b0;
         else     v6 <= vd[4];
         ok6    <= okd[3];
+        near6  <= frd[4][15] ? ring_pb : ring_pa;
         accy6  <= wacc(ring_pa[15:8], ring_pb[15:8], frd[4]);
         accc6  <= wacc(ring_pa[7:0],  ring_pb[7:0],  frd[4]);
         ir6    <= vlerp(ring_pa[15:8], ring_pb[15:8], frd[4]);
@@ -214,10 +223,10 @@ module RpSampler #(
         if (sensor_ir) begin
             // 512 rows x 512 words of 8 one-byte luma pixels.
             rw_addr <= {slot6[8:0], strip6[11:3]};
-            rw_din  <= {8{1'b0, (ok6 ? ir6 : BLACK[15:8])}};
+            rw_din  <= {8{1'b0, (!ok6 ? BLACK[15:8] : (INTERP == 0) ? near6[15:8] : ir6)}};
         end else begin
             rw_addr <= {slot6[7:0], strip6[11:2]};
-            rw_din  <= {4{2'b00, (ok6 ? {accy6[23:16], accc6[23:16]} : BLACK)}};
+            rw_din  <= {4{2'b00, (!ok6 ? BLACK : (INTERP == 0) ? near6 : {accy6[23:16], accc6[23:16]})}};
         end
     end
 

@@ -10,8 +10,9 @@
 // Each case writes its output raster to sim_out/rp_<case>.hex; compare with
 //   python model/compare_rp_tb.py
 module tb_RpRenderer;
-    parameter ROOT = "E:/Xylinx/EO_Panorama_V19_RollPitch";
-    parameter OUTDIR = "E:/Xylinx/EO_Panorama_V19_RollPitch/sim_out";
+    parameter ROOT = "E:/Xylinx/EO_Panorama_V19_Interp";
+    parameter OUTDIR = "E:/Xylinx/EO_Panorama_V19_Interp/sim_out";
+    parameter integer INTERP = 0;            // model/compare_rp_tb.py --interp must match
     parameter integer BEAT_SPACING = 4;
 
     reg clk = 1'b0;
@@ -44,6 +45,7 @@ module tb_RpRenderer;
 
     RpRenderer #(
         .SETTLE_CYCLES(1),
+        .INTERP(INTERP),
         .RUN_ROM_FILE({ROOT, "/assets/rowruns/eo_v19_render_runs.mem"}),
         .IR_RUN_ROM_FILE({ROOT, "/assets/rowruns/ir_v19_render_runs.mem"}),
         .ANGLE_ROM_FILE({ROOT, "/assets/rollpitch/eo_rp_angle.mem"}),

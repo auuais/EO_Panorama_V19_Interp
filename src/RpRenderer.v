@@ -23,6 +23,7 @@
 module RpRenderer #(
     parameter integer SETTLE_CYCLES     = 1,
     parameter integer DRAIN_CYCLES      = 16,
+    parameter integer INTERP            = 0,     // RpSampler: 0 nearest, 1 M1 vertical bilinear
     parameter         RUN_ROM_FILE      = "../../assets/rowruns/eo_v19_render_runs.mem",
     parameter         IR_RUN_ROM_FILE   = "../../assets/rowruns/ir_v19_render_runs.mem",
     parameter         ANGLE_ROM_FILE    = "../../assets/rollpitch/eo_rp_angle.mem",
@@ -255,12 +256,15 @@ module RpRenderer #(
             wr_row_lo <= 11'd0;     wr_row_hi <= 11'd1079;
             wr_beat_lo <= 7'd0;     wr_beat_hi <= 7'd119;
         end else if (tbl_valid && !tbl_ir) begin : win
-            reg [10:0] cl;
+            reg [10:0] cl, ch;
             reg [6:0]  blo, bhi;
-            // qx_phase may step one column below col_lo or up to col_hi.
+            // qx_phase may step one column below col_lo or up to col_hi; with
+            // INTERP 0 x is rounded first, which can add one more column on
+            // the right (never past 1919, qx_phase's clamp).
             cl  = (col_lo == 11'd0) ? 11'd0 : col_lo - 11'd1;
+            ch  = (INTERP != 0 || col_hi >= 11'd1919) ? col_hi : col_hi + 11'd1;
             blo = {cl[10:7], 3'b000};               // (cl/16) rounded down to a batch of 8
-            bhi = {col_hi[10:7], 3'b000};
+            bhi = {ch[10:7], 3'b000};
             fetch_beat_lo <= blo;
             fetch_beat_hi <= bhi;
             wr_row_lo  <= ylo;
@@ -311,7 +315,7 @@ module RpRenderer #(
     wire [71:0] rw_din, rw_dout;
     wire [31:0] row_mismatch;
 
-    RpSampler u_sampler (
+    RpSampler #(.INTERP(INTERP)) u_sampler (
         .clk(clk), .rst(rst || pass_rst), .sensor_ir(tbl_ir),
         .tok_valid(tok_valid), .tok_cam(tok_cam), .tok_sy(tok_sy), .tok_lx(tok_lx),
         .tok_ax(tok_ax), .tok_ay(tok_ay), .y0(y0),
