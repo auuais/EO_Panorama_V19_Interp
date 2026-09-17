@@ -13,6 +13,8 @@ module tb_RpRenderer;
     parameter ROOT = "E:/Xylinx/EO_Panorama_V19_Interp";
     parameter OUTDIR = "E:/Xylinx/EO_Panorama_V19_Interp/sim_out";
     parameter integer INTERP = 0;            // model/compare_rp_tb.py --interp must match
+    parameter integer EO_GRID = 4;           // compare_rp_tb.py --grid-eo / --grid-ir must match
+    parameter integer IR_GRID = 2;
     parameter integer BEAT_SPACING = 4;
 
     reg clk = 1'b0;
@@ -45,7 +47,7 @@ module tb_RpRenderer;
 
     RpRenderer #(
         .SETTLE_CYCLES(1),
-        .INTERP(INTERP),
+        .INTERP(INTERP), .EO_SRC_GRID(EO_GRID), .IR_SRC_GRID(IR_GRID),
         .RUN_ROM_FILE({ROOT, "/assets/rowruns/eo_v19_render_runs.mem"}),
         .IR_RUN_ROM_FILE({ROOT, "/assets/rowruns/ir_v19_render_runs.mem"}),
         .ANGLE_ROM_FILE({ROOT, "/assets/rollpitch/eo_rp_angle.mem"}),
@@ -81,7 +83,7 @@ module tb_RpRenderer;
     endfunction
 
     //------------------------------------------------------------------------
-    // Behavioural BEAT_OUT replay
+    // Behavioural BEAT_OUT replay (with the RTL replay's ROW_GRID row remap)
     //------------------------------------------------------------------------
     integer rp_row, rp_beat, rp_cam, rp_p, rp_wait;
     reg     rp_running = 1'b0;
@@ -106,10 +108,10 @@ module tb_RpRenderer;
                             for (rp_cam = 0; rp_cam < 6; rp_cam = rp_cam + 1)
                                 if (sensor_ir)
                                     for (rp_p = 0; rp_p < 32; rp_p = rp_p + 1)
-                                        beat_data[rp_cam*256 + rp_p*8 +: 8] = src_px(rp_cam, rp_beat*32 + rp_p, rp_row) >> 8;
+                                        beat_data[rp_cam*256 + rp_p*8 +: 8] = src_px(rp_cam, rp_beat*32 + rp_p, rp_row & ~(IR_GRID-1)) >> 8;
                                 else
                                     for (rp_p = 0; rp_p < 16; rp_p = rp_p + 1)
-                                        beat_data[rp_cam*256 + rp_p*16 +: 16] = src_px(rp_cam, rp_beat*16 + rp_p, rp_row);
+                                        beat_data[rp_cam*256 + rp_p*16 +: 16] = src_px(rp_cam, rp_beat*16 + rp_p, rp_row & ~(EO_GRID-1));
                             beat_valid = 1'b1;
                             @(negedge clk) beat_valid = 1'b0;
                             repeat ((sensor_ir ? 8 : BEAT_SPACING) - 1) @(negedge clk);

@@ -24,6 +24,8 @@ module RpRenderer #(
     parameter integer SETTLE_CYCLES     = 1,
     parameter integer DRAIN_CYCLES      = 16,
     parameter integer INTERP            = 0,     // RpSampler: 0 nearest, 1 M1 vertical bilinear
+    parameter integer EO_SRC_GRID       = 1,     // RpLineRing columns; the EO replay's ROW_GRID must match
+    parameter integer IR_SRC_GRID       = 1,     // RpLineRing columns; the IR replay's ROW_GRID must match
     parameter         RUN_ROM_FILE      = "../../assets/rowruns/eo_v19_render_runs.mem",
     parameter         IR_RUN_ROM_FILE   = "../../assets/rowruns/ir_v19_render_runs.mem",
     parameter         ANGLE_ROM_FILE    = "../../assets/rollpitch/eo_rp_angle.mem",
@@ -267,7 +269,8 @@ module RpRenderer #(
             bhi = {ch[10:7], 3'b000};
             fetch_beat_lo <= blo;
             fetch_beat_hi <= bhi;
-            wr_row_lo  <= ylo;
+            // With EO_SRC_GRID the replay reads row r from r & ~(GRID-1).
+            wr_row_lo  <= ylo & ~(EO_SRC_GRID - 1);
             wr_row_hi  <= (yhi == 11'd1079) ? 11'd1079 : yhi + 11'd1;
             wr_beat_lo <= blo;
             wr_beat_hi <= (bhi > 7'd112) ? 7'd119 : bhi + 7'd7;
@@ -282,7 +285,7 @@ module RpRenderer #(
     wire [2:0]  ring_cam;
     wire [15:0] ring_pa, ring_pb;
 
-    RpLineRing u_ring (
+    RpLineRing #(.EO_GRID(EO_SRC_GRID), .IR_GRID(IR_SRC_GRID)) u_ring (
         .clk(clk), .rst(rst), .frame_start(source_frame_reset), .sensor_ir(tbl_ir),
         .beat_valid(beat_valid), .beat_row(beat_row), .beat_idx(beat_idx), .beat_data(beat_data),
         .row_done(row_done), .row_done_row(row_done_row),

@@ -156,6 +156,12 @@ module PanoramaBase_DdrBlackFrame(
     // Roll/pitch renderer source sampling: 0 = no interpolation (nearest
     // source pixel), 1 = M1 vertical bilinear.  See RpSampler.
     localparam integer RP_INTERP = 0;
+    // Interpolation experiment: panorama sources coarsened to a GRID x GRID
+    // block grid (DDR replay rows + line-ring columns).  EO panorama already
+    // samples ~every 2nd source pixel, so 4 halves its effective resolution;
+    // IR is ~1:1, so 2 does.  1 = normal.  Panorama modes only.
+    localparam integer EO_SRC_GRID = 4;
+    localparam integer IR_SRC_GRID = 2;
 
     //------------------------------------------------------------------------
     // Geometry / DDR layout
@@ -2283,7 +2289,8 @@ module PanoramaBase_DdrBlackFrame(
             .CAM3_BASE_ADDR(V19_SRC_BASE_ADDR + (V19_SRC_CAM_STRIDE * 3)),
             .CAM4_BASE_ADDR(V19_SRC_BASE_ADDR + (V19_SRC_CAM_STRIDE * 4)),
             .CAM5_BASE_ADDR(V19_SRC_BASE_ADDR + (V19_SRC_CAM_STRIDE * 5)),
-            .BEAT_OUT(EO_RP_RENDERER), .BEAT_HOLD(2), .DYN_FETCH(EO_RP_RENDERER)
+            .BEAT_OUT(EO_RP_RENDERER), .BEAT_HOLD(2), .DYN_FETCH(EO_RP_RENDERER),
+            .ROW_GRID(EO_SRC_GRID)
         ) u_v19_replay (
             .rst_n(rst_n), .clk(c0_ddr4_ui_clk), .ui_rst(ui_rst),
             .run_enable(running && v19_render_active && !ir_stack_ui),
@@ -2324,7 +2331,8 @@ module PanoramaBase_DdrBlackFrame(
             .CAM5_BASE_ADDR(IR_V19_SRC_BASE_ADDR + (IR_V19_SRC_CAM_STRIDE * 5)),
             .FRAME_STRIDE_ADDR(IR_V19_SRC_FRAME_STRIDE),
             .ROW_STRIDE_ADDR(IR_V19_SRC_ROW_STRIDE),
-            .BEAT_OUT(EO_RP_RENDERER), .BEAT_HOLD(7)
+            .BEAT_OUT(EO_RP_RENDERER), .BEAT_HOLD(7),
+            .ROW_GRID(IR_SRC_GRID)
         ) u_irv19_replay (
             .rst_n(rst_n), .clk(c0_ddr4_ui_clk), .ui_rst(ui_rst),
             .run_enable(running && v19_render_active && ir_stack_ui),
@@ -2640,7 +2648,7 @@ module PanoramaBase_DdrBlackFrame(
             wire [15:0] rp_px_data;
             wire rp_need_valid;
             wire [10:0] rp_need_row, rp_start_row;
-            RpRenderer #(.INTERP(RP_INTERP)) u_v19_renderer (
+            RpRenderer #(.INTERP(RP_INTERP), .EO_SRC_GRID(EO_SRC_GRID), .IR_SRC_GRID(IR_SRC_GRID)) u_v19_renderer (
                 .rst_n(rst_n), .clk(c0_ddr4_ui_clk),
                 .sensor_ir(ir_stack_ui),
                 .start_copy(v19_render_active),

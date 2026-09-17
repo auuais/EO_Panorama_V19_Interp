@@ -6,7 +6,9 @@
 // rows stored as {Y, 0x80} ring words.
 module tb_IrV19DdrReplayBeatOut;
     localparam integer LAT       = 24;
-    localparam integer START_ROW = 25;
+    localparam integer START_ROW = 25;       // odd: exercises the ROW_GRID start remap
+    localparam integer ROW_GRID  = 2;
+    localparam [10:0]  RMASK     = ~(ROW_GRID - 1);
 
     reg clk = 1'b0;
     always #5 clk = ~clk;
@@ -61,7 +63,7 @@ module tb_IrV19DdrReplayBeatOut;
     wire [6:0]  beat_idx;
     wire [1535:0] beat_data;
 
-    IrV19DdrReplay #(.BEAT_OUT(1), .BEAT_HOLD(7)) dut (
+    IrV19DdrReplay #(.BEAT_OUT(1), .BEAT_HOLD(7), .ROW_GRID(ROW_GRID)) dut (
         .rst_n(rst_n), .clk(clk), .ui_rst(ui_rst), .run_enable(run_enable),
         .beat_valid(beat_valid), .beat_row(beat_row), .beat_idx(beat_idx), .beat_data(beat_data),
         .row_done(row_done), .row_done_row(row_done_row),
@@ -106,7 +108,7 @@ module tb_IrV19DdrReplayBeatOut;
         input integer c, row, x;
         reg [255:0] b;
         begin
-            b = beat_for(bank_off(c) + row * 29'd160 + (x / 32) * 29'd8);
+            b = beat_for(bank_off(c) + (row & RMASK) * 29'd160 + (x / 32) * 29'd8);
             expect_px = {b[(x % 32) * 8 +: 8], 8'h80};
         end
     endfunction
@@ -131,7 +133,7 @@ module tb_IrV19DdrReplayBeatOut;
                 errs = errs + 1;
             end
             for (c = 0; c < 6; c = c + 1)
-                if (beat_data[c*256 +: 256] !== beat_for(bank_off(c) + beat_row * 29'd160 + beat_idx * 29'd8)) begin
+                if (beat_data[c*256 +: 256] !== beat_for(bank_off(c) + (beat_row & RMASK) * 29'd160 + beat_idx * 29'd8)) begin
                     if (errs < 5) $display("  DATA cam%0d row %0d beat %0d", c, beat_row, beat_idx);
                     errs = errs + 1;
                 end

@@ -28,8 +28,15 @@ def main():
     ok = True
     args = sys.argv[1:]
     interp = "none"                      # tb_RpRenderer INTERP 0
-    if args[:1] == ["--interp"]:
-        interp, args = args[1], args[2:]
+    grid = {"eo": 4, "ir": 2}            # tb_RpRenderer EO_GRID / IR_GRID
+    while args[:1] and args[0].startswith("--"):
+        if args[0] == "--interp":
+            interp = args[1]
+        elif args[0] in ("--grid-eo", "--grid-ir"):
+            grid[args[0][-2:]] = int(args[1])
+        else:
+            sys.exit(f"unknown option {args[0]}")
+        args = args[2:]
     only = args
     for name, (s, r, p, present) in CASES.items():
         if only and name not in only:
@@ -41,7 +48,7 @@ def main():
             continue
         if s.name not in roms:
             roms[s.name] = rc.load_rom(s)
-            frames[s.name] = rc.synthetic_frames(s)
+            frames[s.name] = rc.coarsen(s, rc.synthetic_frames(s), grid["ir" if s.is_ir else "eo"])
         got = np.array([int(t, 16) for t in f.read_text().split()], np.int64)
         exp = rc.render_offsets(s, roms[s.name], frames[s.name], r, p, present, interp).reshape(-1)
         n = min(got.size, exp.size)

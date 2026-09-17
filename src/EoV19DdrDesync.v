@@ -746,7 +746,11 @@ module EoV19DdrReplay #(
     parameter integer BEAT_OUT = 0,
     parameter integer BEAT_HOLD = 3,
     // DYN_FETCH=1: the horizontal fetch window comes from fetch_beat_lo/hi.
-    parameter integer DYN_FETCH = 0
+    parameter integer DYN_FETCH = 0,
+    // ROW_GRID (power of two): row r is read from DDR row r & ~(ROW_GRID-1)
+    // but still presented as row r -- a source with ROW_GRID x fewer rows,
+    // for the interpolation experiments.  1 = normal.
+    parameter integer ROW_GRID = 1
 ) (
     input  wire        rst_n,
     input  wire        clk,
@@ -870,6 +874,8 @@ module EoV19DdrReplay #(
     reg [15:0] gap_count;
     reg [12:0] line_timer;
     reg [28:0] row_base_addr;
+    reg [28:0] rd_row_base_addr;       // row_base_addr of dbg_row & ~(ROW_GRID-1)
+    localparam [10:0] ROW_GRID_MASK = ~(ROW_GRID - 1);
     reg [11:0] latched_bank;
     // One small buffer per camera, written as returns arrive and read back a
     // beat at a time during the shift.  Six separate arrays rather than one
@@ -1004,7 +1010,7 @@ module EoV19DdrReplay #(
         begin
             cam_addr = cam_base(cam) +
                        bank_offset(bank_for_cam(cam)) +
-                       row_base_addr +
+                       rd_row_base_addr +
                        ({22'd0, bx} * BEAT_STRIDE_ADDR);
         end
     endfunction
@@ -1035,6 +1041,7 @@ module EoV19DdrReplay #(
             gap_count <= 16'd0;
             line_timer <= 13'd0;
             row_base_addr <= 29'd0;
+            rd_row_base_addr <= 29'd0;
             latched_bank <= 12'd0;
             replay_hsync0 <= 1'b0; replay_hsync1 <= 1'b0; replay_hsync2 <= 1'b0;
             replay_hsync3 <= 1'b0; replay_hsync4 <= 1'b0; replay_hsync5 <= 1'b0;
@@ -1067,6 +1074,7 @@ module EoV19DdrReplay #(
             gap_count <= 16'd0;
             line_timer <= 13'd0;
             row_base_addr <= 29'd0;
+            rd_row_base_addr <= 29'd0;
             replay_hsync0 <= 1'b0; replay_hsync1 <= 1'b0; replay_hsync2 <= 1'b0;
             replay_hsync3 <= 1'b0; replay_hsync4 <= 1'b0; replay_hsync5 <= 1'b0;
             replay_vsync0 <= 1'b1; replay_vsync1 <= 1'b1; replay_vsync2 <= 1'b1;
@@ -1118,6 +1126,7 @@ module EoV19DdrReplay #(
                         // row, so their row tags remain exact.
                         dbg_row <= source_start_row;
                         row_base_addr <= row_offset(source_start_row);
+                        rd_row_base_addr <= row_offset(source_start_row & ROW_GRID_MASK);
                         beat_x <= 7'd0;
                         req_idx <= 7'd0;
                         ret_idx <= 7'd0;
@@ -1296,6 +1305,8 @@ module EoV19DdrReplay #(
                     end else begin
                         dbg_row <= dbg_row + 11'd1;
                         row_base_addr <= row_base_addr + ROW_STRIDE_ADDR;
+                        if (((dbg_row + 11'd1) & ~ROW_GRID_MASK) == 11'd0)
+                            rd_row_base_addr <= row_base_addr + ROW_STRIDE_ADDR;
                         state <= ST_REQ;
                     end
                 end

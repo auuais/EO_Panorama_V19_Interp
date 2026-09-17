@@ -10,6 +10,10 @@ time.  This model describes both through a Sensor config:
   * sampling (interp="none", RpSampler INTERP 0): the nearest source pixel,
     x = round(ax), row = round(ay); EO x phase-locked to pano_x parity; IR
     chroma is 0x80
+  * source grid (coarsen, RTL EO/IR_SRC_GRID): every source pixel replaced by
+    the first pixel of its GRID x GRID block -- rows by the DDR replay
+    (ROW_GRID), columns by RpLineRing; EO keeps 4:2:2 phase (luma from the
+    block's first pixel, Cb/Cr from its first pair)
   * sampling (interp="vlerp", RpSampler INTERP 1, M1): EO interpolates luma
     and the per-pixel chroma byte vertically with rounding (interp8) from
     x = floor(ax) phase-locked to parity; IR interpolates luma only with the
@@ -186,6 +190,18 @@ def qx_phase(ax, parity, rnd=0):
 # ---------------------------------------------------------------------------
 # Offset renderer (functional)
 # ---------------------------------------------------------------------------
+def coarsen(s: Sensor, frames, grid: int):
+    if grid == 1:
+        return frames
+    r = np.arange(s.src_h) & ~(grid - 1)
+    x = np.arange(s.src_w)
+    xb = x & ~(grid - 1)
+    f = frames[:, r, :]
+    if s.is_ir:
+        return f[:, :, xb]
+    return (f[:, :, xb] & 0xFF00) | (f[:, :, xb | (x & 1)] & 0xFF)
+
+
 def strips(s: Sensor, rom, frames, roll, pitch, interp="none"):
     assert interp in ("none", "vlerp")
     rnd = 1 if interp == "none" else 0

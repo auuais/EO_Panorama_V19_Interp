@@ -20,9 +20,19 @@
 //
 // Read side: one shared word address, two slots (rows y0 and y0+1), one
 // camera.  Latency RD_LAT = 4 from rd_* to rd_pa/rd_pb.
+//
+// EO_GRID / IR_GRID (power of two, <= 16 / 32): interpolation experiments.
+// Every pixel is stored as a copy of the first pixel of its GRID-wide block,
+// i.e. a source with GRID x fewer columns.  EO keeps 4:2:2 phase: luma from
+// the block's first pixel, Cb/Cr from its first pair.  A block never leaves
+// its beat, so the fetch window is unaffected.  1 = normal.  (The replay's
+// ROW_GRID does the same for rows.)
 //============================================================================
 `timescale 1ns/1ps
-module RpLineRing (
+module RpLineRing #(
+    parameter integer EO_GRID = 1,
+    parameter integer IR_GRID = 1
+) (
     input  wire          clk,
     input  wire          rst,
     input  wire          frame_start,      // replay frame_edge: forget all rows
@@ -51,6 +61,19 @@ module RpLineRing (
     // Writer: one beat -> four words, all six cameras in parallel
     //------------------------------------------------------------------------
     reg [1535:0] wbeat;
+    wire [1535:0] beat_eo_g, beat_ir_g;
+    genvar bc, bp;
+    generate
+        for (bc = 0; bc < 6; bc = bc + 1) begin : g_grid_cam
+            for (bp = 0; bp < 16; bp = bp + 1) begin : g_eo
+                assign beat_eo_g[bc*256 + bp*16 + 8 +: 8] = beat_data[bc*256 + (bp & ~(EO_GRID-1))*16 + 8 +: 8];
+                assign beat_eo_g[bc*256 + bp*16     +: 8] = beat_data[bc*256 + ((bp & ~(EO_GRID-1)) | (bp & 1))*16 +: 8];
+            end
+            for (bp = 0; bp < 32; bp = bp + 1) begin : g_ir
+                assign beat_ir_g[bc*256 + bp*8 +: 8] = beat_data[bc*256 + (bp & ~(IR_GRID-1))*8 +: 8];
+            end
+        end
+    endgenerate
     reg [8:0]    wbase;          // beat_idx * 4
     reg [1:0]    wslot;
     reg [3:0]    wleft;          // words still to write for the latched beat
@@ -73,7 +96,7 @@ module RpLineRing (
             row_done_pend <= 1'b0;
         end else begin
             if (beat_valid) begin
-                wbeat <= beat_data;
+                wbeat <= sensor_ir ? beat_ir_g : beat_eo_g;
                 wbase <= sensor_ir ? {beat_idx[5:0], 3'b000} : {beat_idx, 2'b00};
                 wslot <= mod3(beat_row);
                 wleft <= sensor_ir ? 4'd8 : 4'd4;

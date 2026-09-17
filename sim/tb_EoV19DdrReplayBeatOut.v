@@ -14,7 +14,9 @@
 //   * a pass aborted at arbitrary points leaves the next pass clean
 module tb_EoV19DdrReplayBeatOut;
     localparam integer LAT       = 24;
-    localparam integer START_ROW = 40;
+    localparam integer START_ROW = 42;       // not on the ROW_GRID, so the start remap is exercised
+    localparam integer ROW_GRID  = 4;
+    localparam [10:0]  RMASK     = ~(ROW_GRID - 1);
 
     reg clk = 1'b0;
     always #5 clk = ~clk;
@@ -71,7 +73,7 @@ module tb_EoV19DdrReplayBeatOut;
     wire [6:0]  beat_idx;
     wire [1535:0] beat_data;
 
-    EoV19DdrReplay #(.BEAT_OUT(1), .BEAT_HOLD(2), .DYN_FETCH(1)) dut (
+    EoV19DdrReplay #(.BEAT_OUT(1), .BEAT_HOLD(2), .DYN_FETCH(1), .ROW_GRID(ROW_GRID)) dut (
         .rst_n(rst_n), .clk(clk), .ui_rst(ui_rst), .run_enable(run_enable),
         .fetch_beat_lo(fetch_lo), .fetch_beat_hi(fetch_hi),
         .beat_valid(beat_valid), .beat_row(beat_row), .beat_idx(beat_idx), .beat_data(beat_data),
@@ -118,7 +120,7 @@ module tb_EoV19DdrReplayBeatOut;
         reg [28:0] a;
         reg [255:0] b;
         begin
-            a = bank_off(c) + row * 29'd960 + (x / 16) * 29'd8;
+            a = bank_off(c) + (row & RMASK) * 29'd960 + (x / 16) * 29'd8;
             b = beat_for(a);
             expect_px = b[(x % 16) * 16 +: 16];
         end
@@ -146,7 +148,7 @@ module tb_EoV19DdrReplayBeatOut;
                 errs = errs + 1;
             end
             for (c = 0; c < 6; c = c + 1)
-                if (beat_data[c*256 +: 256] !== beat_for(bank_off(c) + beat_row * 29'd960 + beat_idx * 29'd8)) begin
+                if (beat_data[c*256 +: 256] !== beat_for(bank_off(c) + (beat_row & RMASK) * 29'd960 + beat_idx * 29'd8)) begin
                     if (errs < 5) $display("  DATA cam%0d row %0d beat %0d", c, beat_row, beat_idx);
                     errs = errs + 1;
                 end

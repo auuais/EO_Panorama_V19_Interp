@@ -21,7 +21,10 @@ module IrV19DdrReplay #(
     // on beat_* for one cycle and hold BEAT_HOLD cycles while RpLineRing
     // writes it as eight 4-pixel words, instead of shifting it out.
     parameter integer BEAT_OUT = 0,
-    parameter integer BEAT_HOLD = 7
+    parameter integer BEAT_HOLD = 7,
+    // ROW_GRID (power of two): row r is read from DDR row r & ~(ROW_GRID-1)
+    // but still presented as row r (interpolation experiments).  1 = normal.
+    parameter integer ROW_GRID = 1
 ) (
     input  wire        rst_n,
     input  wire        clk,
@@ -101,6 +104,8 @@ module IrV19DdrReplay #(
     reg [4:0] shift_count;
     reg [7:0] gap_count;
     reg [28:0] row_base_addr;
+    reg [28:0] rd_row_base_addr;       // row_base_addr of dbg_row & ~(ROW_GRID-1)
+    localparam [10:0] ROW_GRID_MASK = ~(ROW_GRID - 1);
     reg [11:0] latched_bank;
     reg [255:0] cbuf0 [0:RBATCH-1];
     reg [255:0] cbuf1 [0:RBATCH-1];
@@ -203,7 +208,7 @@ module IrV19DdrReplay #(
         begin
             cam_addr = cam_base(cam) +
                        bank_offset(bank_for_cam(cam)) +
-                       row_base_addr +
+                       rd_row_base_addr +
                        ({23'd0, bx} * BEAT_STRIDE_ADDR);
         end
     endfunction
@@ -225,6 +230,7 @@ module IrV19DdrReplay #(
             shift_count <= 5'd0;
             gap_count <= 8'd0;
             row_base_addr <= 29'd0;
+            rd_row_base_addr <= 29'd0;
             latched_bank <= 12'd0;
             replay_hsync0 <= 1'b0; replay_hsync1 <= 1'b0; replay_hsync2 <= 1'b0;
             replay_hsync3 <= 1'b0; replay_hsync4 <= 1'b0; replay_hsync5 <= 1'b0;
@@ -248,6 +254,7 @@ module IrV19DdrReplay #(
             shift_count <= 5'd0;
             gap_count <= 8'd0;
             row_base_addr <= 29'd0;
+            rd_row_base_addr <= 29'd0;
             replay_hsync0 <= 1'b0; replay_hsync1 <= 1'b0; replay_hsync2 <= 1'b0;
             replay_hsync3 <= 1'b0; replay_hsync4 <= 1'b0; replay_hsync5 <= 1'b0;
             replay_vsync0 <= 1'b0; replay_vsync1 <= 1'b0; replay_vsync2 <= 1'b0;
@@ -286,6 +293,7 @@ module IrV19DdrReplay #(
                         latched_bank <= {bank5, bank4, bank3, bank2, bank1, bank0};
                         dbg_row <= source_start_row;
                         row_base_addr <= row_offset(source_start_row);
+                        rd_row_base_addr <= row_offset(source_start_row & ROW_GRID_MASK);
                         beat_x <= 6'd0;
                         req_idx <= 5'd0;
                         ret_idx <= 5'd0;
@@ -407,6 +415,8 @@ module IrV19DdrReplay #(
                     end else begin
                         dbg_row <= dbg_row + 11'd1;
                         row_base_addr <= row_base_addr + ROW_STRIDE_ADDR;
+                        if (((dbg_row + 11'd1) & ~ROW_GRID_MASK) == 11'd0)
+                            rd_row_base_addr <= row_base_addr + ROW_STRIDE_ADDR;
                         state <= ST_REQ;
                     end
                 end
