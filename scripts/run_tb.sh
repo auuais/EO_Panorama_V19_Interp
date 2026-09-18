@@ -24,7 +24,9 @@ rm -rf "$WORK"; mkdir -p "$WORK"
   "$VIV/xvlog.bat" -sv -i "$OLDPWD/src" \
       "$OLDPWD/src"/*.v "$OLDPWD/sim/$TB.v" /c/AMDDesignTools/2025.2/Vivado/data/verilog/src/glbl.v "$@" > xvlog.log 2>&1 || {
       echo "XVLOG FAILED"; grep -E "ERROR" xvlog.log | head -20; exit 1; }
-  "$VIV/xelab.bat" -debug off -O0 -L xpm -L unisims_ver -L unimacro_ver -L secureip "$TOP" glbl -s "${TB}_sim" > xelab.log 2>&1 || {
+  # XELAB_ARGS: extra xelab flags, e.g. XELAB_ARGS='-generic_top BLANK=0' to
+  # override a testbench parameter without editing it.
+  "$VIV/xelab.bat" -debug off -O0 -L xpm -L unisims_ver -L unimacro_ver -L secureip ${XELAB_ARGS:-} "$TOP" glbl -s "${TB}_sim" > xelab.log 2>&1 || {
       echo "XELAB FAILED"; grep -E "ERROR" xelab.log | head -20; exit 1; }
   # Keep the whole run; tailing it here has truncated a testbench's case list
   # before and made four of six cases look like they had not run.

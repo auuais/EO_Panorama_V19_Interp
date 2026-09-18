@@ -26,6 +26,11 @@ module RpRenderer #(
     parameter integer INTERP            = 0,     // RpSampler: 0 nearest, 1 M1 vertical bilinear
     parameter integer EO_SRC_GRID       = 1,     // RpLineRing columns; the EO replay's ROW_GRID must match
     parameter integer IR_SRC_GRID       = 1,     // RpLineRing columns; the IR replay's ROW_GRID must match
+    // BLANK_OFFSET_CAMS 1: an EO camera whose roll or pitch offset is not
+    // zero is rendered as an absent camera -- a black tile, the others
+    // unaffected -- and returns as soon as both are zero again.  IR is never
+    // blanked.  0 = off.
+    parameter integer BLANK_OFFSET_CAMS = 0,
     parameter         RUN_ROM_FILE      = "../../assets/rowruns/eo_v19_render_runs.mem",
     parameter         IR_RUN_ROM_FILE   = "../../assets/rowruns/ir_v19_render_runs.mem",
     parameter         ANGLE_ROM_FILE    = "../../assets/rollpitch/eo_rp_angle.mem",
@@ -101,6 +106,21 @@ module RpRenderer #(
 
     wire [95:0] sel_roll  = sensor_ir ? ir_roll_cd  : eo_roll_cd;
     wire [95:0] sel_pitch = sensor_ir ? ir_pitch_cd : eo_pitch_cd;
+
+    // Cameras to hide because they carry an offset (BLANK_OFFSET_CAMS).  The
+    // emitter latches cam_present at pass start, so a camera reappears on the
+    // first pass after its offset goes back to zero -- the same pass that
+    // adopts the rebuilt tables.
+    wire [5:0] offset_nonzero;
+    genvar gcp;
+    generate
+        for (gcp = 0; gcp < 6; gcp = gcp + 1) begin : g_offs
+            assign offset_nonzero[gcp] = (sel_roll[gcp*16 +: 16] != 16'd0) ||
+                                         (sel_pitch[gcp*16 +: 16] != 16'd0);
+        end
+    endgenerate
+    wire [5:0] cam_present_eff = (BLANK_OFFSET_CAMS != 0) && !sensor_ir
+                                 ? (cam_present & ~offset_nonzero) : cam_present;
 
     EoV19RunRom #(.DEPTH(`EO_V19_RUN_COUNT), .ADDR_W(15), .ROM_FILE(RUN_ROM_FILE)) u_rom (
         .clk(clk), .addr_a(rom_addr), .addr_b(15'd0), .data_a(rom_data), .data_b(rom_data_unused));
@@ -333,7 +353,7 @@ module RpRenderer #(
 
     RpEmitter #(.RW_RD_LAT(5), .ALPHA_Y_FILE(ALPHA_Y_FILE), .ALPHA_C_FILE(ALPHA_C_FILE),
                 .IR_ALPHA_Y_FILE(IR_ALPHA_Y_FILE)) u_emit (
-        .clk(clk), .rst(rst || pass_rst), .sensor_ir(tbl_ir), .start(pass_start), .cam_present(cam_present),
+        .clk(clk), .rst(rst || pass_rst), .sensor_ir(tbl_ir), .start(pass_start), .cam_present(cam_present_eff),
         .rr_raddr(rr_raddr), .rr_rdata(rr_rdata),
         .y0_done_valid(y0_done_valid), .y0_done(y0_done), .all_done(all_done),
         .drop_valid(drop_valid), .drop_sy(drop_sy),

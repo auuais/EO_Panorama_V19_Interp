@@ -267,7 +267,13 @@ def compose(s: Sensor, st, present=(1,) * 6):
     return out
 
 
-def render_offsets(s, rom, frames, roll, pitch, present=(1,) * 6, interp="none"):
+def render_offsets(s, rom, frames, roll, pitch, present=(1,) * 6, interp="none",
+                   blank_offset_cams=False):
+    # RpRenderer BLANK_OFFSET_CAMS: an EO camera carrying an offset renders as
+    # an absent camera (black tile, its seams black too).
+    if blank_offset_cams and not s.is_ir:
+        present = tuple(p if (roll[k] == 0 and pitch[k] == 0) else 0
+                        for k, p in enumerate(present))
     return compose(s, strips(s, rom, frames, roll, pitch, interp), present)
 
 

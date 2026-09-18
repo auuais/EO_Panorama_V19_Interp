@@ -14,6 +14,7 @@ module tb_RpRenderer;
     parameter OUTDIR = "E:/Xylinx/EO_Panorama_V19_Interp/sim_out";
     parameter integer INTERP = 0;            // model/compare_rp_tb.py --interp must match
     parameter integer EO_GRID = 16;          // compare_rp_tb.py --grid-eo / --grid-ir must match
+    parameter integer BLANK = 1;             // compare_rp_tb.py --no-blank when 0
     parameter integer IR_GRID = 8;
     parameter integer BEAT_SPACING = 4;
 
@@ -48,6 +49,7 @@ module tb_RpRenderer;
     RpRenderer #(
         .SETTLE_CYCLES(1),
         .INTERP(INTERP), .EO_SRC_GRID(EO_GRID), .IR_SRC_GRID(IR_GRID),
+        .BLANK_OFFSET_CAMS(BLANK),
         .RUN_ROM_FILE({ROOT, "/assets/rowruns/eo_v19_render_runs.mem"}),
         .IR_RUN_ROM_FILE({ROOT, "/assets/rowruns/ir_v19_render_runs.mem"}),
         .ANGLE_ROM_FILE({ROOT, "/assets/rollpitch/eo_rp_angle.mem"}),

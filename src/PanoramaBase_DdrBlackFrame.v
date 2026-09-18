@@ -166,6 +166,9 @@ module PanoramaBase_DdrBlackFrame(
     // (the renderer sees zero, so its IR tables are the unrotated ones).  EO
     // keeps them.  The firmware still stores and reports IR offsets.
     localparam integer IR_RP_OFFSETS = 0;
+    // EO_BLANK_OFFSET_CAMS 1: an EO camera with a non-zero roll/pitch offset
+    // shows a black tile until its offset is set back to zero.
+    localparam integer EO_BLANK_OFFSET_CAMS = 1;
 
     //------------------------------------------------------------------------
     // Geometry / DDR layout
@@ -2652,7 +2655,8 @@ module PanoramaBase_DdrBlackFrame(
             wire [15:0] rp_px_data;
             wire rp_need_valid;
             wire [10:0] rp_need_row, rp_start_row;
-            RpRenderer #(.INTERP(RP_INTERP), .EO_SRC_GRID(EO_SRC_GRID), .IR_SRC_GRID(IR_SRC_GRID)) u_v19_renderer (
+            RpRenderer #(.INTERP(RP_INTERP), .EO_SRC_GRID(EO_SRC_GRID), .IR_SRC_GRID(IR_SRC_GRID),
+                         .BLANK_OFFSET_CAMS(EO_BLANK_OFFSET_CAMS)) u_v19_renderer (
                 .rst_n(rst_n), .clk(c0_ddr4_ui_clk),
                 .sensor_ir(ir_stack_ui),
                 .start_copy(v19_render_active),

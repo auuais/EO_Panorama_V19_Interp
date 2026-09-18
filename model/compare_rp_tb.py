@@ -29,7 +29,12 @@ def main():
     args = sys.argv[1:]
     interp = "none"                      # tb_RpRenderer INTERP 0
     grid = {"eo": 16, "ir": 8}           # tb_RpRenderer EO_GRID / IR_GRID
+    blank = True                         # tb_RpRenderer BLANK 1
     while args[:1] and args[0].startswith("--"):
+        if args[0] == "--no-blank":          # a flag, not a key/value pair
+            blank = False
+            args = args[1:]
+            continue
         if args[0] == "--interp":
             interp = args[1]
         elif args[0] in ("--grid-eo", "--grid-ir"):
@@ -50,7 +55,8 @@ def main():
             roms[s.name] = rc.load_rom(s)
             frames[s.name] = rc.coarsen(s, rc.synthetic_frames(s), grid["ir" if s.is_ir else "eo"])
         got = np.array([int(t, 16) for t in f.read_text().split()], np.int64)
-        exp = rc.render_offsets(s, roms[s.name], frames[s.name], r, p, present, interp).reshape(-1)
+        exp = rc.render_offsets(s, roms[s.name], frames[s.name], r, p, present, interp,
+                                blank).reshape(-1)
         n = min(got.size, exp.size)
         bad = np.nonzero(got[:n] != exp[:n])[0]
         if got.size != exp.size or bad.size:
