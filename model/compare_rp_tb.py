@@ -28,7 +28,7 @@ def main():
     ok = True
     args = sys.argv[1:]
     interp = "none"                      # tb_RpRenderer INTERP 0
-    grid = {"eo": 4, "ir": 2}            # tb_RpRenderer EO_GRID / IR_GRID
+    grid = {"eo": 16, "ir": 8}           # tb_RpRenderer EO_GRID / IR_GRID
     while args[:1] and args[0].startswith("--"):
         if args[0] == "--interp":
             interp = args[1]

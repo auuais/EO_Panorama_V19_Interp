@@ -13,8 +13,8 @@ module tb_RpRenderer;
     parameter ROOT = "E:/Xylinx/EO_Panorama_V19_Interp";
     parameter OUTDIR = "E:/Xylinx/EO_Panorama_V19_Interp/sim_out";
     parameter integer INTERP = 0;            // model/compare_rp_tb.py --interp must match
-    parameter integer EO_GRID = 4;           // compare_rp_tb.py --grid-eo / --grid-ir must match
-    parameter integer IR_GRID = 2;
+    parameter integer EO_GRID = 16;          // compare_rp_tb.py --grid-eo / --grid-ir must match
+    parameter integer IR_GRID = 8;
     parameter integer BEAT_SPACING = 4;
 
     reg clk = 1'b0;

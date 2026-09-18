@@ -7,7 +7,7 @@
 module tb_IrV19DdrReplayBeatOut;
     localparam integer LAT       = 24;
     localparam integer START_ROW = 25;       // odd: exercises the ROW_GRID start remap
-    localparam integer ROW_GRID  = 2;
+    localparam integer ROW_GRID  = 8;
     localparam [10:0]  RMASK     = ~(ROW_GRID - 1);
 
     reg clk = 1'b0;

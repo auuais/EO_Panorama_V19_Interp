@@ -160,8 +160,12 @@ module PanoramaBase_DdrBlackFrame(
     // block grid (DDR replay rows + line-ring columns).  EO panorama already
     // samples ~every 2nd source pixel, so 4 halves its effective resolution;
     // IR is ~1:1, so 2 does.  1 = normal.  Panorama modes only.
-    localparam integer EO_SRC_GRID = 4;
-    localparam integer IR_SRC_GRID = 2;
+    localparam integer EO_SRC_GRID = 16;
+    localparam integer IR_SRC_GRID = 8;
+    // IR_RP_OFFSETS 0: IR panorama ignores the per-camera roll/pitch offsets
+    // (the renderer sees zero, so its IR tables are the unrotated ones).  EO
+    // keeps them.  The firmware still stores and reports IR offsets.
+    localparam integer IR_RP_OFFSETS = 0;
 
     //------------------------------------------------------------------------
     // Geometry / DDR layout
@@ -2661,7 +2665,8 @@ module PanoramaBase_DdrBlackFrame(
                 .row_done    (ir_stack_ui ? irv19_row_done     : v19_row_done),
                 .row_done_row(ir_stack_ui ? irv19_row_done_row : v19_row_done_row),
                 .eo_roll_cd(v19_rp_roll_cd), .eo_pitch_cd(v19_rp_pitch_cd),
-                .ir_roll_cd(irv19_rp_roll_cd), .ir_pitch_cd(irv19_rp_pitch_cd),
+                .ir_roll_cd(IR_RP_OFFSETS ? irv19_rp_roll_cd : 96'd0),
+                .ir_pitch_cd(IR_RP_OFFSETS ? irv19_rp_pitch_cd : 96'd0),
                 .px_valid(rp_px_valid), .px_ready(v19_px_ready), .px_data(rp_px_data),
                 .frame_done(rp_frame_done), .frames_valid(rp_frames_valid),
                 .source_need_valid(rp_need_valid),
