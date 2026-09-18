@@ -25,8 +25,16 @@ rm -rf "$WORK"; mkdir -p "$WORK"
       "$OLDPWD/src"/*.v "$OLDPWD/sim/$TB.v" /c/AMDDesignTools/2025.2/Vivado/data/verilog/src/glbl.v "$@" > xvlog.log 2>&1 || {
       echo "XVLOG FAILED"; grep -E "ERROR" xvlog.log | head -20; exit 1; }
   # XELAB_ARGS: extra xelab flags, e.g. XELAB_ARGS='-generic_top BLANK=0' to
-  # override a testbench parameter without editing it.
-  "$VIV/xelab.bat" -debug off -O0 -L xpm -L unisims_ver -L unimacro_ver -L secureip ${XELAB_ARGS:-} "$TOP" glbl -s "${TB}_sim" > xelab.log 2>&1 || {
+  # override a testbench parameter without editing it.  They go through an
+  # options file because xelab.bat swallows the '=' of a command-line
+  # -generic_top (the parameter then arrives as "BLANK 0" and is not found).
+  optf=""
+  if [ -n "${XELAB_ARGS:-}" ]; then
+      printf '%s
+' "$XELAB_ARGS" > xelab_opts.f
+      optf="-f xelab_opts.f"
+  fi
+  "$VIV/xelab.bat" -debug off -O0 -L xpm -L unisims_ver -L unimacro_ver -L secureip $optf "$TOP" glbl -s "${TB}_sim" > xelab.log 2>&1 || {
       echo "XELAB FAILED"; grep -E "ERROR" xelab.log | head -20; exit 1; }
   # Keep the whole run; tailing it here has truncated a testbench's case list
   # before and made four of six cases look like they had not run.
