@@ -23,7 +23,8 @@
 module RpRenderer #(
     parameter integer SETTLE_CYCLES     = 1,
     parameter integer DRAIN_CYCLES      = 16,
-    parameter integer INTERP            = 0,     // RpSampler: 0 nearest, 1 M1 vertical bilinear
+    parameter integer EO_INTERP         = 0,     // RpSampler: 0 nearest, 1 M1 vertical bilinear
+    parameter integer IR_INTERP         = 0,
     parameter integer EO_SRC_GRID       = 1,     // RpLineRing columns; the EO replay's ROW_GRID must match
     parameter integer IR_SRC_GRID       = 1,     // RpLineRing columns; the IR replay's ROW_GRID must match
     // BLANK_OFFSET_CAMS 1: an EO camera whose roll or pitch offset is not
@@ -281,10 +282,10 @@ module RpRenderer #(
             reg [10:0] cl, ch;
             reg [6:0]  blo, bhi;
             // qx_phase may step one column below col_lo or up to col_hi; with
-            // INTERP 0 x is rounded first, which can add one more column on
+            // EO_INTERP 0 x is rounded first, which can add one more column on
             // the right (never past 1919, qx_phase's clamp).
             cl  = (col_lo == 11'd0) ? 11'd0 : col_lo - 11'd1;
-            ch  = (INTERP != 0 || col_hi >= 11'd1919) ? col_hi : col_hi + 11'd1;
+            ch  = (EO_INTERP != 0 || col_hi >= 11'd1919) ? col_hi : col_hi + 11'd1;
             blo = {cl[10:7], 3'b000};               // (cl/16) rounded down to a batch of 8
             bhi = {ch[10:7], 3'b000};
             fetch_beat_lo <= blo;
@@ -338,7 +339,7 @@ module RpRenderer #(
     wire [71:0] rw_din, rw_dout;
     wire [31:0] row_mismatch;
 
-    RpSampler #(.INTERP(INTERP)) u_sampler (
+    RpSampler #(.EO_INTERP(EO_INTERP), .IR_INTERP(IR_INTERP)) u_sampler (
         .clk(clk), .rst(rst || pass_rst), .sensor_ir(tbl_ir),
         .tok_valid(tok_valid), .tok_cam(tok_cam), .tok_sy(tok_sy), .tok_lx(tok_lx),
         .tok_ax(tok_ax), .tok_ay(tok_ay), .y0(y0),
