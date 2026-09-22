@@ -42,8 +42,13 @@ CASES = {
 BLACK = rc.BLACK
 
 
-def noise_check(s, got, clean, roll, pitch, present):
-    """Checks for OFFSET_CAM_MARK 2 (noise).  Returns a list of problems."""
+def noise_check(s, got, clean, oos, roll, pitch, present):
+    """Checks for OFFSET_CAM_MARK 2 (noise).  Returns a list of problems.
+
+    oos marks out-of-source pixels.  It cannot be read off clean == BLACK: with
+    full-range test frames a real sample equals the black code (Y 16, C 128)
+    about once in 65536 pixels, and the RTL rightly adds noise to it.
+    """
     got = got.reshape(clean.shape)
     flagged = [k for k in range(6) if roll[k] or pitch[k]]
     region = np.zeros(s.out_w, bool)
@@ -61,7 +66,7 @@ def noise_check(s, got, clean, roll, pitch, present):
         lo = s.cam_start[k] + s.head_len[k - 1] if k > 0 else 0
         hi = s.cam_start[k] + s.tail_start[k] if k < 5 else s.out_w
         g, c = got[:, lo:hi], clean[:, lo:hi]
-        blk = c == BLACK
+        blk = oos[:, lo:hi]
         if (g[blk] != BLACK).any():
             problems.append(f"cam{k}: {int((g[blk] != BLACK).sum())} out-of-source pixels not black")
         y, cc = g >> 8, g & 0xFF
@@ -110,11 +115,14 @@ def main():
         mode = interp["ir" if s.is_ir else "eo"]
         if mark == "noise" and not s.is_ir:
             clean = rc.render_offsets(s, roms[s.name], frames[s.name], r, p, present, mode, False)
+            # Y >= 0x20 everywhere, so only an out-of-source sample renders black
+            oos = rc.render_offsets(s, roms[s.name], frames[s.name] | 0x2000, r, p, present, mode,
+                                    False) == BLACK
             if got.size != clean.size:
                 ok = False
                 print(f"{name}: {got.size}/{clean.size} pixels")
                 continue
-            probs = noise_check(s, got, clean, r, p, present)
+            probs = noise_check(s, got, clean, oos, r, p, present)
             errs = [x for x in probs if not x.startswith("(info)")]
             ok &= not errs
             print(f"{name}: {'noise checks pass' if not errs else 'FAIL'}; " + "; ".join(probs))
