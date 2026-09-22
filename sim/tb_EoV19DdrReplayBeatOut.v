@@ -15,7 +15,7 @@
 module tb_EoV19DdrReplayBeatOut;
     localparam integer LAT       = 24;
     localparam integer START_ROW = 42;       // not on the ROW_GRID, so the start remap is exercised
-    localparam integer ROW_GRID  = 4;
+    localparam integer ROW_GRID  = 1;
     localparam [10:0]  RMASK     = ~(ROW_GRID - 1);
 
     reg clk = 1'b0;

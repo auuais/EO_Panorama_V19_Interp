@@ -12,11 +12,11 @@
 module tb_RpRenderer;
     parameter ROOT = "E:/Xylinx/EO_Panorama_V19_Interp";
     parameter OUTDIR = "E:/Xylinx/EO_Panorama_V19_Interp/sim_out";
-    parameter integer EO_INTERP = 0;         // compare_rp_tb.py --interp-eo / --interp-ir must match
+    parameter integer EO_INTERP = 1;         // compare_rp_tb.py --interp-eo / --interp-ir must match
     parameter integer IR_INTERP = 1;
-    parameter integer EO_GRID = 4;           // compare_rp_tb.py --grid-eo / --grid-ir must match
+    parameter integer EO_GRID = 1;           // compare_rp_tb.py --grid-eo / --grid-ir must match
     parameter integer IR_GRID = 1;
-    parameter integer BLANK = 1;             // compare_rp_tb.py --no-blank when 0
+    parameter integer MARK = 2;              // compare_rp_tb.py --mark none|black|noise (0|1|2)
     parameter integer BEAT_SPACING = 4;
 
     reg clk = 1'b0;
@@ -51,7 +51,7 @@ module tb_RpRenderer;
         .SETTLE_CYCLES(1),
         .EO_INTERP(EO_INTERP), .IR_INTERP(IR_INTERP),
         .EO_SRC_GRID(EO_GRID), .IR_SRC_GRID(IR_GRID),
-        .BLANK_OFFSET_CAMS(BLANK),
+        .OFFSET_CAM_MARK(MARK),
         .RUN_ROM_FILE({ROOT, "/assets/rowruns/eo_v19_render_runs.mem"}),
         .IR_RUN_ROM_FILE({ROOT, "/assets/rowruns/ir_v19_render_runs.mem"}),
         .ANGLE_ROM_FILE({ROOT, "/assets/rollpitch/eo_rp_angle.mem"}),
@@ -200,6 +200,7 @@ module tb_RpRenderer;
         run_pass("ir_absent2", 1, v6(0,0,0,0,0,0), v6(0,0,0,0,0,0), 6'b111011);
         run_pass("ir_absent3", 1, v6(150,-300,1000,-1000,0,777), v6(-1000,250,0,1000,-60,5), 6'b110111);
         run_pass("eo_absent",  0, v6(150,-300,1000,-1000,0,777), v6(-1000,250,0,1000,-60,5), 6'b110111);
+        run_pass("eo_partial", 0, v6(0,600,0,0,0,-250), v6(0,0,0,300,0,0), 6'h3F);
         $display("DONE tb_RpRenderer");
         $finish;
     end

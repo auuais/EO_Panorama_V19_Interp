@@ -155,21 +155,22 @@ module PanoramaBase_DdrBlackFrame(
     localparam integer EO_RP_RENDERER = 1;
     // Roll/pitch renderer source sampling: 0 = no interpolation (nearest
     // source pixel), 1 = M1 vertical bilinear.  See RpSampler.
-    localparam integer EO_RP_INTERP = 0;        // EO panorama: nearest neighbour
+    localparam integer EO_RP_INTERP = 1;        // EO panorama: M1 vertical bilinear
     localparam integer IR_RP_INTERP = 1;        // IR panorama: M1 vertical bilinear
     // Interpolation experiment: panorama sources coarsened to a GRID x GRID
     // block grid (DDR replay rows + line-ring columns).  EO panorama already
     // samples ~every 2nd source pixel, so 4 halves its effective resolution;
     // IR is ~1:1, so 2 does.  1 = normal.  Panorama modes only.
-    localparam integer EO_SRC_GRID = 4;
+    localparam integer EO_SRC_GRID = 1;         // EO: full resolution again
     localparam integer IR_SRC_GRID = 1;         // IR: full resolution again
     // IR_RP_OFFSETS 0: IR panorama ignores the per-camera roll/pitch offsets
     // (the renderer sees zero, so its IR tables are the unrotated ones).  EO
     // keeps them.  The firmware still stores and reports IR offsets.
     localparam integer IR_RP_OFFSETS = 0;
-    // EO_BLANK_OFFSET_CAMS 1: an EO camera with a non-zero roll/pitch offset
-    // shows a black tile until its offset is set back to zero.
-    localparam integer EO_BLANK_OFFSET_CAMS = 1;
+    // EO_OFFSET_CAM_MARK: an EO camera with a non-zero roll/pitch offset shows
+    // 0 normally, 1 as a black tile, 2 with heavy live noise, until its offset
+    // is set back to zero (RpRenderer OFFSET_CAM_MARK).
+    localparam integer EO_OFFSET_CAM_MARK = 2;
 
     //------------------------------------------------------------------------
     // Geometry / DDR layout
@@ -2658,7 +2659,7 @@ module PanoramaBase_DdrBlackFrame(
             wire [10:0] rp_need_row, rp_start_row;
             RpRenderer #(.EO_INTERP(EO_RP_INTERP), .IR_INTERP(IR_RP_INTERP),
                          .EO_SRC_GRID(EO_SRC_GRID), .IR_SRC_GRID(IR_SRC_GRID),
-                         .BLANK_OFFSET_CAMS(EO_BLANK_OFFSET_CAMS)) u_v19_renderer (
+                         .OFFSET_CAM_MARK(EO_OFFSET_CAM_MARK)) u_v19_renderer (
                 .rst_n(rst_n), .clk(c0_ddr4_ui_clk),
                 .sensor_ir(ir_stack_ui),
                 .start_copy(v19_render_active),

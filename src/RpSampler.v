@@ -18,6 +18,11 @@
 // Both datapaths are built when the two sensors differ; the mode is picked
 // from sensor_ir, which is static while a pass runs.
 //
+// noise_mask[cam] (EO only): heavy additive noise on that camera's pixels --
+// luma +-128, chroma +-64 from a free-running xorshift32, so it changes every
+// frame -- clamped to legal video (Y 16..235, C 16..240): 0x00/0xFF in active
+// video would read as SDI sync words.  Out-of-source (black) pixels stay black.
+//
 // The RowWindow address is {sy mod 256, strip_x >> 2}; pixel strip_x & 3 of
 // the 72-bit word lives at [sel*18 +: 16] and is written with byte enables,
 // so no read-modify-write is needed.
@@ -47,6 +52,7 @@ module RpSampler #(
     input  wire               clk,
     input  wire               rst,
     input  wire               sensor_ir,
+    input  wire [5:0]         noise_mask,  // per camera, EO; see header
 
     input  wire               tok_valid,
     input  wire [2:0]         tok_cam,
@@ -125,7 +131,7 @@ module RpSampler #(
     endfunction
 
     // ---- S1: decode -------------------------------------------------------
-    reg        v1, ok1;
+    reg        v1, ok1, nz1;
     reg [15:0] fr1;
     reg [8:0]  slot1;
     reg [11:0] strip1;
@@ -135,6 +141,7 @@ module RpSampler #(
         ok1    <= (tok_ax >= 0) && (tok_ax <= XMAXQ) &&
                   (tok_ay >= 0) && (tok_ay <= YMAXQ);
         fr1    <= tok_ay[15:0];
+        nz1    <= noise_mask[tok_cam] && !sensor_ir;
         slot1  <= tok_sy;
         strip1 <= strip_base(tok_cam, sensor_ir) + {2'd0, tok_lx};
         begin : rd
@@ -161,7 +168,7 @@ module RpSampler #(
 
     // ---- S2..S5: wait for the ring (latency 4) ----------------------------
     reg [4:1]  vd;
-    reg [3:0]  okd;
+    reg [3:0]  okd, nzd;
     reg [15:0] frd [1:4];
     reg [8:0]  slotd [1:4];
     reg [11:0] stripd [1:4];
@@ -169,9 +176,10 @@ module RpSampler #(
     always @(posedge clk) begin
         if (rst) vd <= 4'd0;
         else     vd <= {vd[3:1], v1};
-        okd[0] <= ok1; frd[1] <= fr1; slotd[1] <= slot1; stripd[1] <= strip1;
+        okd[0] <= ok1; nzd[0] <= nz1; frd[1] <= fr1; slotd[1] <= slot1; stripd[1] <= strip1;
         for (k = 2; k <= 4; k = k + 1) begin
-            okd[k-1] <= okd[k-2]; frd[k] <= frd[k-1]; slotd[k] <= slotd[k-1]; stripd[k] <= stripd[k-1];
+            okd[k-1] <= okd[k-2]; nzd[k-1] <= nzd[k-2];
+            frd[k] <= frd[k-1]; slotd[k] <= slotd[k-1]; stripd[k] <= stripd[k-1];
         end
     end
     // vd[4], okd[3], frd[4], slotd[4], stripd[4] are aligned with ring_pa/pb.
@@ -195,7 +203,7 @@ module RpSampler #(
             vlerp = p0 + m[24:16];
         end
     endfunction
-    reg        v6, ok6;
+    reg        v6, ok6, nz6;
     reg [15:0] near6;                      // no interpolation: the nearest row's {Y, C}
     reg [32:0] accy6, accc6;               // interpolated
     reg        ui6;                        // use_interp, aligned with the data
@@ -206,6 +214,7 @@ module RpSampler #(
         if (rst) v6 <= 1'b0;
         else     v6 <= vd[4];
         ok6    <= okd[3];
+        nz6    <= nzd[3];
         near6  <= frd[4][15] ? ring_pb : ring_pa;
         ui6    <= use_interp;
         accy6  <= wacc(ring_pa[15:8], ring_pb[15:8], frd[4]);
@@ -214,6 +223,31 @@ module RpSampler #(
         slot6  <= slotd[4];
         strip6 <= stripd[4];
     end
+
+    // ---- offset-camera noise (noise_mask) ---------------------------------
+    // Free running and never reset (pass_rst included), so every frame gets
+    // new noise: live static over the image, not a frozen pattern.
+    reg  [31:0] ns = 32'h2545F491;
+    wire [31:0] ns_a = ns ^ (ns << 13);
+    wire [31:0] ns_b = ns_a ^ (ns_a >> 17);
+    always @(posedge clk) ns <= ns_b ^ (ns_b << 5);
+    wire signed [8:0] noise_y = $signed({ns[7], ns[7:0]});           // -128..127
+    wire signed [8:0] noise_c = $signed({{2{ns[15]}}, ns[15:9]});    // -64..63
+    function [7:0] add_clamp;
+        input [7:0]        v;
+        input signed [8:0] n;
+        input [7:0]        lo, hi;
+        reg signed [10:0]  t;
+        begin
+            t = $signed({3'b000, v}) + n;
+            if (t < $signed({3'b000, lo}))      add_clamp = lo;
+            else if (t > $signed({3'b000, hi})) add_clamp = hi;
+            else                                add_clamp = t[7:0];
+        end
+    endfunction
+    wire [15:0] eo_pix6   = !ui6 ? near6 : {accy6[23:16], accc6[23:16]};
+    wire [15:0] eo_noisy6 = {add_clamp(eo_pix6[15:8], noise_y, 8'd16, 8'd235),
+                             add_clamp(eo_pix6[7:0],  noise_c, 8'd16, 8'd240)};
 
     // ---- S7: write --------------------------------------------------------
     always @(posedge clk) begin
@@ -234,7 +268,7 @@ module RpSampler #(
             rw_din  <= {8{1'b0, (!ok6 ? BLACK[15:8] : !ui6 ? near6[15:8] : ir6)}};
         end else begin
             rw_addr <= {slot6[7:0], strip6[11:2]};
-            rw_din  <= {4{2'b00, (!ok6 ? BLACK : !ui6 ? near6 : {accy6[23:16], accc6[23:16]})}};
+            rw_din  <= {4{2'b00, (!ok6 ? BLACK : nz6 ? eo_noisy6 : eo_pix6)}};
         end
     end
 
