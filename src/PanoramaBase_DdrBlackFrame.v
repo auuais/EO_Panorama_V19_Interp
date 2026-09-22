@@ -171,6 +171,9 @@ module PanoramaBase_DdrBlackFrame(
     // 0 normally, 1 as a black tile, 2 with heavy live noise, until its offset
     // is set back to zero (RpRenderer OFFSET_CAM_MARK).
     localparam integer EO_OFFSET_CAM_MARK = 2;
+    // Noise strength for mark 2, in halves: 2 = luma +-128 / chroma +-64,
+    // 3 = +-192 / +-96 (clamped to legal levels either way).
+    localparam integer EO_NOISE_GAIN_HALVES = 3;
 
     //------------------------------------------------------------------------
     // Geometry / DDR layout
@@ -2659,7 +2662,8 @@ module PanoramaBase_DdrBlackFrame(
             wire [10:0] rp_need_row, rp_start_row;
             RpRenderer #(.EO_INTERP(EO_RP_INTERP), .IR_INTERP(IR_RP_INTERP),
                          .EO_SRC_GRID(EO_SRC_GRID), .IR_SRC_GRID(IR_SRC_GRID),
-                         .OFFSET_CAM_MARK(EO_OFFSET_CAM_MARK)) u_v19_renderer (
+                         .OFFSET_CAM_MARK(EO_OFFSET_CAM_MARK),
+                         .NOISE_GAIN_HALVES(EO_NOISE_GAIN_HALVES)) u_v19_renderer (
                 .rst_n(rst_n), .clk(c0_ddr4_ui_clk),
                 .sensor_ir(ir_stack_ui),
                 .start_copy(v19_render_active),

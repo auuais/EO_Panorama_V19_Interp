@@ -34,6 +34,7 @@ module RpRenderer #(
     //   2  noise: its pixels get heavy live noise (RpSampler noise_mask), and
     //      the seams either side blend that noise in
     parameter integer OFFSET_CAM_MARK   = 0,
+    parameter integer NOISE_GAIN_HALVES = 3,     // OFFSET_CAM_MARK 2 strength, see RpSampler
     parameter         RUN_ROM_FILE      = "../../assets/rowruns/eo_v19_render_runs.mem",
     parameter         IR_RUN_ROM_FILE   = "../../assets/rowruns/ir_v19_render_runs.mem",
     parameter         ANGLE_ROM_FILE    = "../../assets/rollpitch/eo_rp_angle.mem",
@@ -344,7 +345,8 @@ module RpRenderer #(
     wire [71:0] rw_din, rw_dout;
     wire [31:0] row_mismatch;
 
-    RpSampler #(.EO_INTERP(EO_INTERP), .IR_INTERP(IR_INTERP)) u_sampler (
+    RpSampler #(.EO_INTERP(EO_INTERP), .IR_INTERP(IR_INTERP),
+                .NOISE_GAIN_HALVES(NOISE_GAIN_HALVES)) u_sampler (
         .clk(clk), .rst(rst || pass_rst), .sensor_ir(tbl_ir), .noise_mask(noise_mask_q),
         .tok_valid(tok_valid), .tok_cam(tok_cam), .tok_sy(tok_sy), .tok_lx(tok_lx),
         .tok_ax(tok_ax), .tok_ay(tok_ay), .y0(y0),

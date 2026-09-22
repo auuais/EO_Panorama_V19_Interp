@@ -19,9 +19,10 @@
 // from sensor_ir, which is static while a pass runs.
 //
 // noise_mask[cam] (EO only): heavy additive noise on that camera's pixels --
-// luma +-128, chroma +-64 from a free-running xorshift32, so it changes every
-// frame -- clamped to legal video (Y 16..235, C 16..240): 0x00/0xFF in active
-// video would read as SDI sync words.  Out-of-source (black) pixels stay black.
+// luma +-128 and chroma +-64 scaled by NOISE_GAIN_HALVES/2 (3: +-192 / +-96),
+// from a free-running xorshift32 so it changes every frame -- clamped to legal
+// video (Y 16..235, C 16..240): 0x00/0xFF in active video would read as SDI
+// sync words.  Out-of-source (black) pixels stay black.
 //
 // The RowWindow address is {sy mod 256, strip_x >> 2}; pixel strip_x & 3 of
 // the 72-bit word lives at [sel*18 +: 16] and is written with byte enables,
@@ -36,6 +37,7 @@ module RpSampler #(
     parameter [15:0]  BLACK = 16'h1080,
     parameter integer EO_INTERP = 0,       // 0 nearest, 1 M1 vertical bilinear
     parameter integer IR_INTERP = 0,
+    parameter integer NOISE_GAIN_HALVES = 3,   // noise_mask amplitude x N/2, N = 1..8
     parameter integer CAM1_START = 633,  parameter integer CAM2_START = 1271,
     parameter integer CAM3_START = 1909, parameter integer CAM4_START = 2547,
     parameter integer CAM5_START = 3185,
@@ -231,18 +233,21 @@ module RpSampler #(
     wire [31:0] ns_a = ns ^ (ns << 13);
     wire [31:0] ns_b = ns_a ^ (ns_a >> 17);
     always @(posedge clk) ns <= ns_b ^ (ns_b << 5);
-    wire signed [8:0] noise_y = $signed({ns[7], ns[7:0]});           // -128..127
-    wire signed [8:0] noise_c = $signed({{2{ns[15]}}, ns[15:9]});    // -64..63
+    wire signed [11:0] n_y = $signed({{4{ns[7]}}, ns[7:0]});        // -128..127
+    wire signed [11:0] n_c = $signed({{5{ns[15]}}, ns[15:9]});      // -64..63
+    // x NOISE_GAIN_HALVES / 2 (a constant multiply: shifts and adds)
+    wire signed [11:0] noise_y = (n_y * NOISE_GAIN_HALVES) >>> 1;
+    wire signed [11:0] noise_c = (n_c * NOISE_GAIN_HALVES) >>> 1;
     function [7:0] add_clamp;
-        input [7:0]        v;
-        input signed [8:0] n;
-        input [7:0]        lo, hi;
-        reg signed [10:0]  t;
+        input [7:0]         v;
+        input signed [11:0] n;
+        input [7:0]         lo, hi;
+        reg signed [13:0]   t;
         begin
-            t = $signed({3'b000, v}) + n;
-            if (t < $signed({3'b000, lo}))      add_clamp = lo;
-            else if (t > $signed({3'b000, hi})) add_clamp = hi;
-            else                                add_clamp = t[7:0];
+            t = $signed({6'd0, v}) + n;
+            if (t < $signed({6'd0, lo}))      add_clamp = lo;
+            else if (t > $signed({6'd0, hi})) add_clamp = hi;
+            else                              add_clamp = t[7:0];
         end
     endfunction
     wire [15:0] eo_pix6   = !ui6 ? near6 : {accy6[23:16], accc6[23:16]};
