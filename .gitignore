@@ -71,3 +71,4 @@ dfx_runtime.txt
 clockInfo.txt
 xvlog.pb
 sim_out/
+mcs/
