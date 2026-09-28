@@ -1822,13 +1822,36 @@ module PanoramaBase_DdrBlackFrame(
             .roll_cd(irv19_rp_roll_cd), .pitch_cd(irv19_rp_pitch_cd),
             .update_count(irv19_rp_offset_updates));
 
+        // EO single reads ONE camera's whole frame from these same buffers, so
+        // that camera has to be written whole.  The panorama write window
+        // (beats 16..103, rows 46..1053) covers only what the renderer
+        // addresses, which is why EO single showed unwritten DDR as a noise
+        // border around the picture.
+        //
+        // Only the displayed camera is widened.  Writing all six whole is what
+        // c83e29d removed to reach 30 fps: six full captures need ~23.3
+        // Mbeat/s against the ~22.3 Mbeat/s the write path delivers, while
+        // five windowed plus one whole is ~17 Mbeat/s.
+        wire [6:0]  v19_cap_wr_beat_lo [0:5];
+        wire [6:0]  v19_cap_wr_beat_hi [0:5];
+        wire [10:0] v19_cap_wr_row_lo  [0:5];
+        wire [10:0] v19_cap_wr_row_hi  [0:5];
+        genvar wk;
+        for (wk = 0; wk < 6; wk = wk + 1) begin : g_wr_win
+            wire full = eo_single_ui && (eo_sel_ui == wk[2:0]);
+            assign v19_cap_wr_beat_lo[wk] = full ? 7'd0     : v19_wr_beat_lo;
+            assign v19_cap_wr_beat_hi[wk] = full ? 7'd119   : v19_wr_beat_hi;
+            assign v19_cap_wr_row_lo[wk]  = full ? 11'd0    : v19_wr_row_lo;
+            assign v19_cap_wr_row_hi[wk]  = full ? 11'd1079 : v19_wr_row_hi;
+        end
+
         EoV19DdrCamWriter #(.CAM_BASE_ADDR(V19_SRC_BASE_ADDR + (V19_SRC_CAM_STRIDE * 0)),
                                   .WR_BEAT_LO(7'd16), .WR_BEAT_HI(7'd103),
                                   .WR_ROW_LO(11'd46), .WR_ROW_HI(11'd1053),
                                   .DYN_WINDOW(EO_RP_RENDERER)) u_v19_cap0 (
             .rst_n(rst_n), .capture_enable(running && !ir_stack_ui),
-            .wr_beat_lo_ui(v19_wr_beat_lo), .wr_beat_hi_ui(v19_wr_beat_hi),
-            .wr_row_lo_ui(v19_wr_row_lo), .wr_row_hi_ui(v19_wr_row_hi),
+            .wr_beat_lo_ui(v19_cap_wr_beat_lo[0]), .wr_beat_hi_ui(v19_cap_wr_beat_hi[0]),
+            .wr_row_lo_ui(v19_cap_wr_row_lo[0]), .wr_row_hi_ui(v19_cap_wr_row_hi[0]),
             .join_enable(v19_join_enable[0]),
             .cap_fifo_rst_req(v19_cap_fifo_rst[0]),
             .free_fifo_rst_req(v19_free_fifo_rst[0]),
@@ -1850,8 +1873,8 @@ module PanoramaBase_DdrBlackFrame(
                                   .WR_ROW_LO(11'd46), .WR_ROW_HI(11'd1053),
                                   .DYN_WINDOW(EO_RP_RENDERER)) u_v19_cap1 (
             .rst_n(rst_n), .capture_enable(running && !ir_stack_ui),
-            .wr_beat_lo_ui(v19_wr_beat_lo), .wr_beat_hi_ui(v19_wr_beat_hi),
-            .wr_row_lo_ui(v19_wr_row_lo), .wr_row_hi_ui(v19_wr_row_hi),
+            .wr_beat_lo_ui(v19_cap_wr_beat_lo[1]), .wr_beat_hi_ui(v19_cap_wr_beat_hi[1]),
+            .wr_row_lo_ui(v19_cap_wr_row_lo[1]), .wr_row_hi_ui(v19_cap_wr_row_hi[1]),
             .join_enable(v19_join_enable[1]),
             .cap_fifo_rst_req(v19_cap_fifo_rst[1]),
             .free_fifo_rst_req(v19_free_fifo_rst[1]),
@@ -1873,8 +1896,8 @@ module PanoramaBase_DdrBlackFrame(
                                   .WR_ROW_LO(11'd46), .WR_ROW_HI(11'd1053),
                                   .DYN_WINDOW(EO_RP_RENDERER)) u_v19_cap2 (
             .rst_n(rst_n), .capture_enable(running && !ir_stack_ui),
-            .wr_beat_lo_ui(v19_wr_beat_lo), .wr_beat_hi_ui(v19_wr_beat_hi),
-            .wr_row_lo_ui(v19_wr_row_lo), .wr_row_hi_ui(v19_wr_row_hi),
+            .wr_beat_lo_ui(v19_cap_wr_beat_lo[2]), .wr_beat_hi_ui(v19_cap_wr_beat_hi[2]),
+            .wr_row_lo_ui(v19_cap_wr_row_lo[2]), .wr_row_hi_ui(v19_cap_wr_row_hi[2]),
             .join_enable(v19_join_enable[2]),
             .cap_fifo_rst_req(v19_cap_fifo_rst[2]),
             .free_fifo_rst_req(v19_free_fifo_rst[2]),
@@ -1896,8 +1919,8 @@ module PanoramaBase_DdrBlackFrame(
                                   .WR_ROW_LO(11'd46), .WR_ROW_HI(11'd1053),
                                   .DYN_WINDOW(EO_RP_RENDERER)) u_v19_cap3 (
             .rst_n(rst_n), .capture_enable(running && !ir_stack_ui),
-            .wr_beat_lo_ui(v19_wr_beat_lo), .wr_beat_hi_ui(v19_wr_beat_hi),
-            .wr_row_lo_ui(v19_wr_row_lo), .wr_row_hi_ui(v19_wr_row_hi),
+            .wr_beat_lo_ui(v19_cap_wr_beat_lo[3]), .wr_beat_hi_ui(v19_cap_wr_beat_hi[3]),
+            .wr_row_lo_ui(v19_cap_wr_row_lo[3]), .wr_row_hi_ui(v19_cap_wr_row_hi[3]),
             .join_enable(v19_join_enable[3]),
             .cap_fifo_rst_req(v19_cap_fifo_rst[3]),
             .free_fifo_rst_req(v19_free_fifo_rst[3]),
@@ -1919,8 +1942,8 @@ module PanoramaBase_DdrBlackFrame(
                                   .WR_ROW_LO(11'd46), .WR_ROW_HI(11'd1053),
                                   .DYN_WINDOW(EO_RP_RENDERER)) u_v19_cap4 (
             .rst_n(rst_n), .capture_enable(running && !ir_stack_ui),
-            .wr_beat_lo_ui(v19_wr_beat_lo), .wr_beat_hi_ui(v19_wr_beat_hi),
-            .wr_row_lo_ui(v19_wr_row_lo), .wr_row_hi_ui(v19_wr_row_hi),
+            .wr_beat_lo_ui(v19_cap_wr_beat_lo[4]), .wr_beat_hi_ui(v19_cap_wr_beat_hi[4]),
+            .wr_row_lo_ui(v19_cap_wr_row_lo[4]), .wr_row_hi_ui(v19_cap_wr_row_hi[4]),
             .join_enable(v19_join_enable[4]),
             .cap_fifo_rst_req(v19_cap_fifo_rst[4]),
             .free_fifo_rst_req(v19_free_fifo_rst[4]),
@@ -1942,8 +1965,8 @@ module PanoramaBase_DdrBlackFrame(
                                   .WR_ROW_LO(11'd46), .WR_ROW_HI(11'd1053),
                                   .DYN_WINDOW(EO_RP_RENDERER)) u_v19_cap5 (
             .rst_n(rst_n), .capture_enable(running && !ir_stack_ui),
-            .wr_beat_lo_ui(v19_wr_beat_lo), .wr_beat_hi_ui(v19_wr_beat_hi),
-            .wr_row_lo_ui(v19_wr_row_lo), .wr_row_hi_ui(v19_wr_row_hi),
+            .wr_beat_lo_ui(v19_cap_wr_beat_lo[5]), .wr_beat_hi_ui(v19_cap_wr_beat_hi[5]),
+            .wr_row_lo_ui(v19_cap_wr_row_lo[5]), .wr_row_hi_ui(v19_cap_wr_row_hi[5]),
             .join_enable(v19_join_enable[5]),
             .cap_fifo_rst_req(v19_cap_fifo_rst[5]),
             .free_fifo_rst_req(v19_free_fifo_rst[5]),
