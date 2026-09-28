@@ -7,7 +7,7 @@
 
 Defaults match tb_RpRenderer's defaults.  --mark follows the bench's MARK
 (RpRenderer OFFSET_CAM_MARK): what an EO camera carrying a roll/pitch offset
-shows.  none and black are compared bit-exactly.  noise cannot be: the noise
+shows.  none, black and grey are compared bit-exactly.  noise cannot be: the noise
 comes from a free-running generator whose state depends on token timing, so
 for noise the check is
   * every column outside the flagged cameras' strips (and their seams) is
@@ -87,7 +87,7 @@ def main():
     args = sys.argv[1:]
     interp = {"eo": "vlerp", "ir": "vlerp"}  # tb_RpRenderer EO_INTERP / IR_INTERP
     grid = {"eo": 1, "ir": 1}                # tb_RpRenderer EO_GRID / IR_GRID
-    mark = "noise"                           # tb_RpRenderer MARK 2
+    mark = "grey"                            # tb_RpRenderer MARK 3
     while args[:1] and args[0].startswith("--"):
         if args[0] in ("--interp-eo", "--interp-ir"):
             interp[args[0][-2:]] = args[1]
@@ -95,7 +95,7 @@ def main():
             grid[args[0][-2:]] = int(args[1])
         elif args[0] == "--mark":
             mark = args[1]
-            assert mark in ("none", "black", "noise"), mark
+            assert mark in ("none", "black", "noise", "grey"), mark
         else:
             sys.exit(f"unknown option {args[0]}")
         args = args[2:]
@@ -114,10 +114,10 @@ def main():
         got = np.array([int(t, 16) for t in f.read_text().split()], np.int64)
         mode = interp["ir" if s.is_ir else "eo"]
         if mark == "noise" and not s.is_ir:
-            clean = rc.render_offsets(s, roms[s.name], frames[s.name], r, p, present, mode, False)
+            clean = rc.render_offsets(s, roms[s.name], frames[s.name], r, p, present, mode)
             # Y >= 0x20 everywhere, so only an out-of-source sample renders black
-            oos = rc.render_offsets(s, roms[s.name], frames[s.name] | 0x2000, r, p, present, mode,
-                                    False) == BLACK
+            oos = rc.render_offsets(s, roms[s.name], frames[s.name] | 0x2000, r, p, present,
+                                    mode) == BLACK
             if got.size != clean.size:
                 ok = False
                 print(f"{name}: {got.size}/{clean.size} pixels")
@@ -128,7 +128,7 @@ def main():
             print(f"{name}: {'noise checks pass' if not errs else 'FAIL'}; " + "; ".join(probs))
             continue
         exp = rc.render_offsets(s, roms[s.name], frames[s.name], r, p, present, mode,
-                                mark == "black").reshape(-1)
+                                mark).reshape(-1)
         n = min(got.size, exp.size)
         bad = np.nonzero(got[:n] != exp[:n])[0]
         if got.size != exp.size or bad.size:

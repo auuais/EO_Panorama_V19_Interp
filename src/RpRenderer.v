@@ -31,8 +31,10 @@ module RpRenderer #(
     // zero shows, until both are zero again (IR is never marked):
     //   0  nothing (normal roll/pitch rendering)
     //   1  black: rendered as an absent camera, seams either side black too
-    //   2  noise: its pixels get heavy live noise (RpSampler noise_mask), and
+    //   2  noise: its pixels get heavy live noise (RpSampler mark_mask), and
     //      the seams either side blend that noise in
+    //   3  grey: its pixels keep their luma with neutral chroma, so the tile
+    //      is the same picture in monochrome; the seams blend into it
     parameter integer OFFSET_CAM_MARK   = 0,
     parameter integer NOISE_GAIN_HALVES = 3,     // OFFSET_CAM_MARK 2 strength, see RpSampler
     parameter         RUN_ROM_FILE      = "../../assets/rowruns/eo_v19_render_runs.mem",
@@ -113,7 +115,7 @@ module RpRenderer #(
 
     // Cameras marked because they carry an offset (OFFSET_CAM_MARK).  Both
     // marks are fixed at pass start -- the emitter latches cam_present, and
-    // noise_mask_q below -- so a camera returns to normal on the first pass
+    // mark_mask_q below -- so a camera returns to normal on the first pass
     // after its offset goes back to zero, the pass that adopts the rebuilt
     // tables.
     wire [5:0] offset_nonzero;
@@ -126,7 +128,7 @@ module RpRenderer #(
     endgenerate
     wire [5:0] cam_present_eff = (OFFSET_CAM_MARK == 1) && !sensor_ir
                                  ? (cam_present & ~offset_nonzero) : cam_present;
-    reg  [5:0] noise_mask_q = 6'd0;
+    reg  [5:0] mark_mask_q = 6'd0;
 
     EoV19RunRom #(.DEPTH(`EO_V19_RUN_COUNT), .ADDR_W(15), .ROM_FILE(RUN_ROM_FILE)) u_rom (
         .clk(clk), .addr_a(rom_addr), .addr_b(15'd0), .data_a(rom_data), .data_b(rom_data_unused));
@@ -222,7 +224,7 @@ module RpRenderer #(
                         cs <= C_BUILD;
                     end else if (start_copy) begin
                         pass_start <= 1'b1;
-                        noise_mask_q <= (OFFSET_CAM_MARK == 2) && !sensor_ir ? offset_nonzero : 6'd0;
+                        mark_mask_q <= (OFFSET_CAM_MARK >= 2) && !sensor_ir ? offset_nonzero : 6'd0;
                         y0 <= ylo; y0_last <= (ylo == yhi);
                         slot_a <= ylo % 3; slot_b <= (ylo + 11'd1) % 3;
                         y0_done_valid <= 1'b0; all_done <= 1'b0;
@@ -346,8 +348,8 @@ module RpRenderer #(
     wire [31:0] row_mismatch;
 
     RpSampler #(.EO_INTERP(EO_INTERP), .IR_INTERP(IR_INTERP),
-                .NOISE_GAIN_HALVES(NOISE_GAIN_HALVES)) u_sampler (
-        .clk(clk), .rst(rst || pass_rst), .sensor_ir(tbl_ir), .noise_mask(noise_mask_q),
+                .MARK_MODE(OFFSET_CAM_MARK), .NOISE_GAIN_HALVES(NOISE_GAIN_HALVES)) u_sampler (
+        .clk(clk), .rst(rst || pass_rst), .sensor_ir(tbl_ir), .mark_mask(mark_mask_q),
         .tok_valid(tok_valid), .tok_cam(tok_cam), .tok_sy(tok_sy), .tok_lx(tok_lx),
         .tok_ax(tok_ax), .tok_ay(tok_ay), .y0(y0),
         .ring_word(ring_word), .ring_sel(ring_sel), .ring_cam(ring_cam),

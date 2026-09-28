@@ -168,9 +168,10 @@ module PanoramaBase_DdrBlackFrame(
     // keeps them.  The firmware still stores and reports IR offsets.
     localparam integer IR_RP_OFFSETS = 0;
     // EO_OFFSET_CAM_MARK: an EO camera with a non-zero roll/pitch offset shows
-    // 0 normally, 1 as a black tile, 2 with heavy live noise, until its offset
-    // is set back to zero (RpRenderer OFFSET_CAM_MARK).
-    localparam integer EO_OFFSET_CAM_MARK = 2;
+    // 0 normally, 1 as a black tile, 2 with heavy live noise, 3 in grey
+    // (monochrome), until its offset is set back to zero (RpRenderer
+    // OFFSET_CAM_MARK).
+    localparam integer EO_OFFSET_CAM_MARK = 3;
     // Noise strength for mark 2, in halves: 2 = luma +-128 / chroma +-64,
     // 3 = +-192 / +-96 (clamped to legal levels either way).
     localparam integer EO_NOISE_GAIN_HALVES = 3;

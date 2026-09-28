@@ -16,7 +16,7 @@ module tb_RpRenderer;
     parameter integer IR_INTERP = 1;
     parameter integer EO_GRID = 1;           // compare_rp_tb.py --grid-eo / --grid-ir must match
     parameter integer IR_GRID = 1;
-    parameter integer MARK = 2;              // compare_rp_tb.py --mark none|black|noise (0|1|2)
+    parameter integer MARK = 3;              // compare_rp_tb.py --mark none|black|noise|grey (0|1|2|3)
     parameter integer BEAT_SPACING = 4;
 
     reg clk = 1'b0;

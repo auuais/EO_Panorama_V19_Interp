@@ -18,11 +18,15 @@
 // Both datapaths are built when the two sensors differ; the mode is picked
 // from sensor_ir, which is static while a pass runs.
 //
-// noise_mask[cam] (EO only): heavy additive noise on that camera's pixels --
-// luma +-128 and chroma +-64 scaled by NOISE_GAIN_HALVES/2 (3: +-192 / +-96),
-// from a free-running xorshift32 so it changes every frame -- clamped to legal
-// video (Y 16..235, C 16..240): 0x00/0xFF in active video would read as SDI
-// sync words.  Out-of-source (black) pixels stay black.
+// mark_mask[cam] (EO only) marks that camera's pixels, per MARK_MODE:
+//   2  noise: luma +-128 and chroma +-64 scaled by NOISE_GAIN_HALVES/2
+//      (3: +-192 / +-96) from a free-running xorshift32, so it changes every
+//      frame, clamped to legal video (Y 16..235, C 16..240) because 0x00/0xFF
+//      in active video would read as SDI sync words
+//   3  grey: chroma replaced by neutral 0x80, luma untouched, so the tile is
+//      the same picture in monochrome
+// Out-of-source (black) pixels stay black either way -- BLACK is already
+// {0x10, 0x80}, so grey leaves it alone.
 //
 // The RowWindow address is {sy mod 256, strip_x >> 2}; pixel strip_x & 3 of
 // the 72-bit word lives at [sel*18 +: 16] and is written with byte enables,
@@ -37,7 +41,8 @@ module RpSampler #(
     parameter [15:0]  BLACK = 16'h1080,
     parameter integer EO_INTERP = 0,       // 0 nearest, 1 M1 vertical bilinear
     parameter integer IR_INTERP = 0,
-    parameter integer NOISE_GAIN_HALVES = 3,   // noise_mask amplitude x N/2, N = 1..8
+    parameter integer MARK_MODE = 0,           // 2 noise, 3 grey (see header)
+    parameter integer NOISE_GAIN_HALVES = 3,   // mark_mask noise amplitude x N/2, N = 1..8
     parameter integer CAM1_START = 633,  parameter integer CAM2_START = 1271,
     parameter integer CAM3_START = 1909, parameter integer CAM4_START = 2547,
     parameter integer CAM5_START = 3185,
@@ -54,7 +59,7 @@ module RpSampler #(
     input  wire               clk,
     input  wire               rst,
     input  wire               sensor_ir,
-    input  wire [5:0]         noise_mask,  // per camera, EO; see header
+    input  wire [5:0]         mark_mask,   // per camera, EO; see header
 
     input  wire               tok_valid,
     input  wire [2:0]         tok_cam,
@@ -143,7 +148,7 @@ module RpSampler #(
         ok1    <= (tok_ax >= 0) && (tok_ax <= XMAXQ) &&
                   (tok_ay >= 0) && (tok_ay <= YMAXQ);
         fr1    <= tok_ay[15:0];
-        nz1    <= noise_mask[tok_cam] && !sensor_ir;
+        nz1    <= mark_mask[tok_cam] && !sensor_ir;
         slot1  <= tok_sy;
         strip1 <= strip_base(tok_cam, sensor_ir) + {2'd0, tok_lx};
         begin : rd
@@ -226,7 +231,7 @@ module RpSampler #(
         strip6 <= stripd[4];
     end
 
-    // ---- offset-camera noise (noise_mask) ---------------------------------
+    // ---- offset-camera mark (mark_mask) -----------------------------------
     // Free running and never reset (pass_rst included), so every frame gets
     // new noise: live static over the image, not a frozen pattern.
     reg  [31:0] ns = 32'h2545F491;
@@ -253,6 +258,8 @@ module RpSampler #(
     wire [15:0] eo_pix6   = !ui6 ? near6 : {accy6[23:16], accc6[23:16]};
     wire [15:0] eo_noisy6 = {add_clamp(eo_pix6[15:8], noise_y, 8'd16, 8'd235),
                              add_clamp(eo_pix6[7:0],  noise_c, 8'd16, 8'd240)};
+    wire [15:0] eo_grey6  = {eo_pix6[15:8], 8'h80};
+    wire [15:0] eo_mark6  = (MARK_MODE == 3) ? eo_grey6 : eo_noisy6;
 
     // ---- S7: write --------------------------------------------------------
     always @(posedge clk) begin
@@ -273,7 +280,7 @@ module RpSampler #(
             rw_din  <= {8{1'b0, (!ok6 ? BLACK[15:8] : !ui6 ? near6[15:8] : ir6)}};
         end else begin
             rw_addr <= {slot6[7:0], strip6[11:2]};
-            rw_din  <= {4{2'b00, (!ok6 ? BLACK : nz6 ? eo_noisy6 : eo_pix6)}};
+            rw_din  <= {4{2'b00, (!ok6 ? BLACK : nz6 ? eo_mark6 : eo_pix6)}};
         end
     end
 

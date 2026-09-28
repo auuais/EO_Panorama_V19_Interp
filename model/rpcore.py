@@ -268,13 +268,21 @@ def compose(s: Sensor, st, present=(1,) * 6):
 
 
 def render_offsets(s, rom, frames, roll, pitch, present=(1,) * 6, interp="none",
-                   blank_offset_cams=False):
-    # RpRenderer BLANK_OFFSET_CAMS: an EO camera carrying an offset renders as
-    # an absent camera (black tile, its seams black too).
-    if blank_offset_cams and not s.is_ir:
-        present = tuple(p if (roll[k] == 0 and pitch[k] == 0) else 0
-                        for k, p in enumerate(present))
-    return compose(s, strips(s, rom, frames, roll, pitch, interp), present)
+                   mark="none"):
+    # RpRenderer OFFSET_CAM_MARK, for an EO camera carrying an offset:
+    #   black  rendered as an absent camera (its seams go black too)
+    #   grey   luma kept, chroma neutral, at the sampler -- so the seams blend
+    #          the grey tile with its colour neighbour
+    # ("noise" cannot be modelled: its generator is free running.)
+    assert mark in ("none", "black", "grey", "noise")
+    marked = [k for k in range(6) if not s.is_ir and (roll[k] or pitch[k])]
+    if mark == "black":
+        present = tuple(0 if k in marked else p for k, p in enumerate(present))
+    st = strips(s, rom, frames, roll, pitch, interp)
+    if mark == "grey":
+        for k in marked:
+            st[k] = (st[k] & 0xFF00) | 0x80
+    return compose(s, st, present)
 
 
 # ---------------------------------------------------------------------------
